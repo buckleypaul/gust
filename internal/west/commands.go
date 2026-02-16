@@ -26,3 +26,23 @@ func Forall(cmd string) tea.Cmd {
 func Update() tea.Cmd {
 	return RunStreaming("west", "update")
 }
+
+// Init runs `west init -l .` to initialize the workspace using the local manifest.
+func Init() tea.Cmd {
+	return RunStreaming("west", "init", "-l", ".")
+}
+
+// ZephyrExport runs `west zephyr-export` to export CMake packages.
+func ZephyrExport() tea.Cmd {
+	return RunStreaming("west", "zephyr-export")
+}
+
+// PackagesPipInstall runs `west packages pip --install` to install Python dependencies.
+func PackagesPipInstall() tea.Cmd {
+	return RunStreaming("west", "packages", "pip", "--install")
+}
+
+// SdkInstall runs `west sdk install` to download and install the Zephyr SDK.
+func SdkInstall() tea.Cmd {
+	return RunStreaming("west", "sdk", "install")
+}

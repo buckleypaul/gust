@@ -33,7 +33,7 @@ func DetectWorkspace(startDir string) *Workspace {
 				Root:        dir,
 				Initialized: true,
 			}
-			ws.ManifestPath = resolveManifest(dir)
+			ws.ManifestPath = ResolveManifest(dir)
 			return ws
 		}
 
@@ -62,8 +62,8 @@ func DetectWorkspace(startDir string) *Workspace {
 	return nil
 }
 
-// resolveManifest reads .west/config to find the manifest path.
-func resolveManifest(root string) string {
+// ResolveManifest reads .west/config to find the manifest path.
+func ResolveManifest(root string) string {
 	configPath := filepath.Join(root, ".west", "config")
 	f, err := os.Open(configPath)
 	if err != nil {
