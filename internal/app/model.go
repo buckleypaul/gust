@@ -105,9 +105,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "down", "j":
 				m.nextPage()
 				return m, nil
-			case "enter":
-				// Enter on sidebar switches focus to content
+			case "enter", "right", "l":
+				// Enter/Right on sidebar switches focus to content
 				m.focus = FocusContent
+				return m, nil
+			}
+		} else if m.focus == FocusContent {
+			// Allow left arrow to return to sidebar
+			if msg.String() == "left" || msg.String() == "h" {
+				m.focus = FocusSidebar
 				return m, nil
 			}
 		}
