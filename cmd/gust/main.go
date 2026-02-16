@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/buckleypaul/gust/internal/app"
 	"github.com/buckleypaul/gust/internal/config"
 	"github.com/buckleypaul/gust/internal/pages"
+	"github.com/buckleypaul/gust/internal/store"
 	"github.com/buckleypaul/gust/internal/west"
 )
 
@@ -26,14 +28,15 @@ func main() {
 	}
 
 	cfg := config.Load(ws.Root)
+	st := store.New(filepath.Join(ws.Root, ".gust"))
 
 	pageMap := map[app.PageID]app.Page{
 		app.WorkspacePage: pages.NewWorkspacePage(ws),
-		app.BuildPage:     pages.NewBuildPage(),
-		app.FlashPage:     pages.NewFlashPage(),
+		app.BuildPage:     pages.NewBuildPage(st),
+		app.FlashPage:     pages.NewFlashPage(st),
 		app.MonitorPage:   pages.NewMonitorPage(),
 		app.TestPage:      pages.NewTestPage(),
-		app.ArtifactsPage: pages.NewArtifactsPage(),
+		app.ArtifactsPage: pages.NewArtifactsPage(st),
 		app.WestPage:      pages.NewWestPage(),
 		app.ConfigPage:    pages.NewConfigPage(),
 		app.SettingsPage:  pages.NewSettingsPage(&cfg, ws.Root),
