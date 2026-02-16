@@ -34,11 +34,11 @@ func main() {
 		app.WorkspacePage: pages.NewWorkspacePage(ws),
 		app.BuildPage:     pages.NewBuildPage(st),
 		app.FlashPage:     pages.NewFlashPage(st),
-		app.MonitorPage:   pages.NewMonitorPage(),
-		app.TestPage:      pages.NewTestPage(),
+		app.MonitorPage:   pages.NewMonitorPage(st, cfg.SerialBaudRate),
+		app.TestPage:      pages.NewTestPage(st),
 		app.ArtifactsPage: pages.NewArtifactsPage(st),
 		app.WestPage:      pages.NewWestPage(),
-		app.ConfigPage:    pages.NewConfigPage(),
+		app.ConfigPage:    pages.NewConfigPage(ws.Root),
 		app.SettingsPage:  pages.NewSettingsPage(&cfg, ws.Root),
 	}
 
