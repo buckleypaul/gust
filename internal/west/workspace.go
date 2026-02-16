@@ -23,6 +23,8 @@ func DetectWorkspace(startDir string) *Workspace {
 		return nil
 	}
 
+	var manifestCandidate string
+
 	for {
 		// Primary check: look for .west/ directory (standard west workspace)
 		westDir := filepath.Join(dir, ".west")
@@ -31,18 +33,15 @@ func DetectWorkspace(startDir string) *Workspace {
 				Root:        dir,
 				Initialized: true,
 			}
-			// Parse .west/config to find the manifest path
 			ws.ManifestPath = resolveManifest(dir)
 			return ws
 		}
 
-		// Fallback: look for west.yml directly (uninitialised workspace)
-		manifest := filepath.Join(dir, "west.yml")
-		if _, err := os.Stat(manifest); err == nil {
-			return &Workspace{
-				Root:         dir,
-				ManifestPath: manifest,
-				Initialized:  false,
+		// Record west.yml as fallback candidate, but keep walking
+		if manifestCandidate == "" {
+			manifest := filepath.Join(dir, "west.yml")
+			if _, err := os.Stat(manifest); err == nil {
+				manifestCandidate = manifest
 			}
 		}
 
@@ -51,6 +50,14 @@ func DetectWorkspace(startDir string) *Workspace {
 			break // reached filesystem root
 		}
 		dir = parent
+	}
+
+	if manifestCandidate != "" {
+		return &Workspace{
+			Root:         filepath.Dir(manifestCandidate),
+			ManifestPath: manifestCandidate,
+			Initialized:  false,
+		}
 	}
 	return nil
 }

@@ -12,7 +12,8 @@ func TestInitEnvDetectsVenv(t *testing.T) {
 	// Reset package state
 	cmdEnv = nil
 	cmdDir = ""
-	defer func() { cmdEnv = nil; cmdDir = "" }()
+	westBinPath = ""
+	defer func() { cmdEnv = nil; cmdDir = ""; westBinPath = "" }()
 
 	// Create a temp workspace with a fake venv
 	tmp := t.TempDir()
@@ -33,13 +34,21 @@ func TestInitEnvDetectsVenv(t *testing.T) {
 	}
 
 	ws := &Workspace{Root: wsRoot, Initialized: true}
-	InitEnv(ws, "")
+	if err := InitEnv(ws, ""); err != nil {
+		t.Fatalf("InitEnv returned error: %v", err)
+	}
 
 	if cmdDir != wsRoot {
 		t.Errorf("cmdDir = %q, want %q", cmdDir, wsRoot)
 	}
 	if cmdEnv == nil {
 		t.Fatal("cmdEnv is nil, expected it to be set")
+	}
+
+	// Verify westBinPath is set to the venv west binary
+	expectedWestBin := filepath.Join(binDir, westBin)
+	if westBinPath != expectedWestBin {
+		t.Errorf("westBinPath = %q, want %q", westBinPath, expectedWestBin)
 	}
 
 	// Verify PATH contains the venv bin dir
@@ -57,7 +66,8 @@ func TestInitEnvDetectsVenv(t *testing.T) {
 func TestInitEnvOverrideTakesPrecedence(t *testing.T) {
 	cmdEnv = nil
 	cmdDir = ""
-	defer func() { cmdEnv = nil; cmdDir = "" }()
+	westBinPath = ""
+	defer func() { cmdEnv = nil; cmdDir = ""; westBinPath = "" }()
 
 	tmp := t.TempDir()
 	wsRoot := tmp
@@ -80,7 +90,9 @@ func TestInitEnvOverrideTakesPrecedence(t *testing.T) {
 
 	ws := &Workspace{Root: wsRoot, Initialized: true}
 	overridePath := filepath.Join(wsRoot, "custom-venv")
-	InitEnv(ws, overridePath)
+	if err := InitEnv(ws, overridePath); err != nil {
+		t.Fatalf("InitEnv returned error: %v", err)
+	}
 
 	expectedBinDir := filepath.Join(overridePath, "bin")
 	if runtime.GOOS == "windows" {
@@ -101,16 +113,16 @@ func TestInitEnvOverrideTakesPrecedence(t *testing.T) {
 func TestInitEnvFallbackNoVenv(t *testing.T) {
 	cmdEnv = nil
 	cmdDir = ""
-	defer func() { cmdEnv = nil; cmdDir = "" }()
+	westBinPath = ""
+	defer func() { cmdEnv = nil; cmdDir = ""; westBinPath = "" }()
 
 	tmp := t.TempDir()
 	ws := &Workspace{Root: tmp, Initialized: true}
 
-	InitEnv(ws, "")
+	// InitEnv may return an error (auto-setup failure) or nil (west on PATH).
+	// Either way, cmdDir should be set.
+	_ = InitEnv(ws, "")
 
-	if cmdEnv != nil {
-		t.Error("cmdEnv should be nil when no venv exists")
-	}
 	if cmdDir != tmp {
 		t.Errorf("cmdDir = %q, want %q", cmdDir, tmp)
 	}
@@ -119,9 +131,12 @@ func TestInitEnvFallbackNoVenv(t *testing.T) {
 func TestInitEnvNilWorkspace(t *testing.T) {
 	cmdEnv = nil
 	cmdDir = ""
-	defer func() { cmdEnv = nil; cmdDir = "" }()
+	westBinPath = ""
+	defer func() { cmdEnv = nil; cmdDir = ""; westBinPath = "" }()
 
-	InitEnv(nil, "")
+	if err := InitEnv(nil, ""); err != nil {
+		t.Fatalf("InitEnv(nil) returned error: %v", err)
+	}
 
 	if cmdEnv != nil {
 		t.Error("cmdEnv should be nil for nil workspace")

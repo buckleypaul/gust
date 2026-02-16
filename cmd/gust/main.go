@@ -28,7 +28,9 @@ func main() {
 	}
 
 	cfg := config.Load(ws.Root)
-	west.InitEnv(ws, cfg.VenvPath)
+	if err := west.InitEnv(ws, cfg.VenvPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: west auto-setup failed: %v\n", err)
+	}
 	st := store.New(filepath.Join(ws.Root, ".gust"))
 
 	pageMap := map[app.PageID]app.Page{
