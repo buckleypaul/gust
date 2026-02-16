@@ -41,3 +41,10 @@ type Page interface {
 	ShortHelp() []key.Binding
 	SetSize(width, height int)
 }
+
+// InputCapturer is an optional interface for pages with text inputs.
+// When InputCaptured returns true, the app forwards all keys directly
+// to the page instead of processing shortcuts like q, ?, left, etc.
+type InputCapturer interface {
+	InputCaptured() bool
+}

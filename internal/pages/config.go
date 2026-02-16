@@ -79,11 +79,11 @@ func (p *ConfigPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			p.searching = true
 			p.search.Focus()
 			return p, p.search.Focus()
-		case "j", "down":
+		case "down":
 			if p.cursor < len(p.filtered)-1 {
 				p.cursor++
 			}
-		case "k", "up":
+		case "up":
 			if p.cursor > 0 {
 				p.cursor--
 			}
@@ -170,6 +170,10 @@ func (p *ConfigPage) ShortHelp() []key.Binding {
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reload")),
 	}
+}
+
+func (p *ConfigPage) InputCaptured() bool {
+	return p.searching
 }
 
 func (p *ConfigPage) SetSize(w, h int) {

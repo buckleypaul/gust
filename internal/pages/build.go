@@ -240,10 +240,10 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 	case "ctrl+b":
 		return p, p.startBuild()
 	case "y":
-		if p.output.Len() > 0 {
+		if !p.InputCaptured() && p.output.Len() > 0 {
 			p.copyToClipboard()
+			return p, nil
 		}
-		return p, nil
 	case "esc":
 		if p.state == buildStateDone {
 			p.state = buildStateIdle
@@ -292,10 +292,10 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		case "enter", " ":
 			p.pristine = !p.pristine
 			return p, nil
-		case "up", "k":
+		case "up":
 			p.advanceField(-1)
 			return p, nil
-		case "down", "j":
+		case "down":
 			p.advanceField(1)
 			return p, nil
 		}
@@ -305,10 +305,10 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		switch keyStr {
 		case "enter":
 			return p, p.startBuild()
-		case "up", "k":
+		case "up":
 			p.advanceField(-1)
 			return p, nil
-		case "down", "j":
+		case "down":
 			p.advanceField(1)
 			return p, nil
 		}
@@ -320,10 +320,10 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		switch keyStr {
 		case "enter":
 			return p, p.startBuild()
-		case "up", "k":
+		case "up":
 			p.advanceField(-1)
 			return p, nil
-		case "down", "j":
+		case "down":
 			p.advanceField(1)
 			return p, nil
 		}
@@ -335,10 +335,10 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		switch keyStr {
 		case "enter":
 			return p, p.startBuild()
-		case "up", "k":
+		case "up":
 			p.advanceField(-1)
 			return p, nil
-		case "down", "j":
+		case "down":
 			p.advanceField(1)
 			return p, nil
 		}
@@ -590,6 +590,12 @@ func (p *BuildPage) ShortHelp() []key.Binding {
 		bindings = append(bindings, key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy output")))
 	}
 	return bindings
+}
+
+func (p *BuildPage) InputCaptured() bool {
+	return p.state == buildStateIdle && p.focusedField != fieldPristine &&
+		(p.projectInput.Focused() || p.boardInput.Focused() ||
+			p.shieldInput.Focused() || p.cmakeInput.Focused())
 }
 
 func (p *BuildPage) SetSize(w, h int) {

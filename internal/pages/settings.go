@@ -70,11 +70,11 @@ func (p *SettingsPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "j", "down":
+		case "down":
 			if p.cursor < len(settingFields)-1 {
 				p.cursor++
 			}
-		case "k", "up":
+		case "up":
 			if p.cursor > 0 {
 				p.cursor--
 			}
@@ -142,6 +142,10 @@ func (p *SettingsPage) ShortHelp() []key.Binding {
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "edit")),
 		key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save to disk")),
 	}
+}
+
+func (p *SettingsPage) InputCaptured() bool {
+	return p.editing
 }
 
 func (p *SettingsPage) SetSize(w, h int) {

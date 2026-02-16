@@ -88,11 +88,11 @@ func (p *MonitorPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		switch p.state {
 		case monitorStatePortSelect:
 			switch msg.String() {
-			case "j", "down":
+			case "down":
 				if p.cursor < len(p.ports)-1 {
 					p.cursor++
 				}
-			case "k", "up":
+			case "up":
 				if p.cursor > 0 {
 					p.cursor--
 				}
@@ -195,6 +195,10 @@ func (p *MonitorPage) ShortHelp() []key.Binding {
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "connect")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	}
+}
+
+func (p *MonitorPage) InputCaptured() bool {
+	return p.state == monitorStateConnected
 }
 
 func (p *MonitorPage) SetSize(w, h int) {

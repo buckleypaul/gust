@@ -39,9 +39,9 @@ func (p *ArtifactsPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "l", "right":
+		case "right":
 			p.activeTab = (p.activeTab + 1) % artifactTab(len(tabNames))
-		case "h", "left":
+		case "left":
 			p.activeTab = (p.activeTab - 1 + artifactTab(len(tabNames))) % artifactTab(len(tabNames))
 		}
 	}

@@ -53,6 +53,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// When a page has an active text input, forward all keys
+		// directly to the page — only ctrl+c still quits.
+		if m.focus == FocusContent {
+			if ic, ok := m.pages[m.activePage].(InputCapturer); ok && ic.InputCaptured() {
+				if msg.String() == "ctrl+c" {
+					return m, tea.Quit
+				}
+				page := m.pages[m.activePage]
+				newPage, cmd := page.Update(msg)
+				m.pages[m.activePage] = newPage
+				return m, cmd
+			}
+		}
+
 		// Global key handling
 		switch {
 		case key.Matches(msg, GlobalKeys.Quit):
@@ -104,20 +118,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle arrow keys based on focus
 		if m.focus == FocusSidebar {
 			switch msg.String() {
-			case "up", "k":
+			case "up":
 				m.prevPage()
 				return m, nil
-			case "down", "j":
+			case "down":
 				m.nextPage()
 				return m, nil
-			case "enter", "right", "l":
-				// Enter/Right on sidebar switches focus to content
+			case "enter", "right":
 				m.focus = FocusContent
 				return m, nil
 			}
 		} else if m.focus == FocusContent {
-			// Allow left arrow to return to sidebar
-			if msg.String() == "left" || msg.String() == "h" {
+			if msg.String() == "left" {
 				m.focus = FocusSidebar
 				return m, nil
 			}
