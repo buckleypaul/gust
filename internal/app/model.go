@@ -7,9 +7,17 @@ import (
 	"github.com/buckleypaul/gust/internal/ui"
 )
 
+type FocusArea int
+
+const (
+	FocusSidebar FocusArea = iota
+	FocusContent
+)
+
 type Model struct {
 	pages      map[PageID]Page
 	activePage PageID
+	focus      FocusArea
 	width      int
 	height     int
 	showHelp   bool
@@ -52,11 +60,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, GlobalKeys.Help):
 			m.showHelp = !m.showHelp
 			return m, nil
-		case key.Matches(msg, GlobalKeys.NextPage):
-			m.nextPage()
-			return m, nil
-		case key.Matches(msg, GlobalKeys.PrevPage):
-			m.prevPage()
+		case key.Matches(msg, GlobalKeys.ToggleFocus):
+			if m.focus == FocusSidebar {
+				m.focus = FocusContent
+			} else {
+				m.focus = FocusSidebar
+			}
 			return m, nil
 		case key.Matches(msg, GlobalKeys.Page1):
 			m.setPage(0)
@@ -86,13 +95,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setPage(8)
 			return m, nil
 		}
+
+		// Handle arrow keys based on focus
+		if m.focus == FocusSidebar {
+			switch msg.String() {
+			case "up", "k":
+				m.prevPage()
+				return m, nil
+			case "down", "j":
+				m.nextPage()
+				return m, nil
+			case "enter":
+				// Enter on sidebar switches focus to content
+				m.focus = FocusContent
+				return m, nil
+			}
+		}
 	}
 
-	// Delegate to active page
-	page := m.pages[m.activePage]
-	newPage, cmd := page.Update(msg)
-	m.pages[m.activePage] = newPage
-	return m, cmd
+	// Delegate to active page only if content is focused
+	if m.focus == FocusContent {
+		page := m.pages[m.activePage]
+		newPage, cmd := page.Update(msg)
+		m.pages[m.activePage] = newPage
+		return m, cmd
+	}
+
+	return m, nil
 }
 
 func (m Model) View() string {
@@ -105,12 +134,12 @@ func (m Model) View() string {
 
 	page := m.pages[m.activePage]
 
-	sidebar := renderSidebar(PageOrder, m.activePage, m.pages, contentHeight)
+	sidebar := renderSidebar(PageOrder, m.activePage, m.pages, contentHeight, m.focus == FocusSidebar)
 	content := ui.ContentStyle.
 		Width(contentWidth).
 		Height(contentHeight).
 		Render(page.View())
-	statusBar := renderStatusBar(page.ShortHelp(), m.width)
+	statusBar := renderStatusBar(page.ShortHelp(), m.width, m.focus)
 
 	return renderLayout(sidebar, content, statusBar)
 }

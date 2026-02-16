@@ -12,9 +12,15 @@ import (
 
 const sidebarWidth = 22 // 20 content + 2 border/padding
 
-func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, height int) string {
+func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, height int, focused bool) string {
 	var b strings.Builder
-	b.WriteString(ui.TitleStyle.Render("gust"))
+	title := "gust"
+	if focused {
+		title = ui.BoldStyle.Render("gust [FOCUSED]")
+	} else {
+		title = ui.TitleStyle.Render("gust")
+	}
+	b.WriteString(title)
 	b.WriteString("\n\n")
 
 	for i, id := range pages {
@@ -28,21 +34,35 @@ func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, heigh
 		b.WriteString("\n")
 	}
 
-	return ui.SidebarStyle.Height(height).Render(b.String())
+	style := ui.SidebarStyle.Height(height)
+	if focused {
+		style = style.BorderForeground(ui.Primary)
+	}
+	return style.Render(b.String())
 }
 
-func renderStatusBar(pageHelp []key.Binding, width int) string {
+func renderStatusBar(pageHelp []key.Binding, width int, focus FocusArea) string {
 	var parts []string
 
-	for _, kb := range pageHelp {
-		if kb.Enabled() {
-			parts = append(parts, ui.StatusKey(kb.Help().Key, kb.Help().Desc))
+	// Focus-specific instructions
+	if focus == FocusSidebar {
+		parts = append(parts,
+			ui.StatusKey("↑/↓", "navigate"),
+			ui.StatusKey("enter", "select"),
+		)
+	} else {
+		// Page-specific keys when content is focused
+		for _, kb := range pageHelp {
+			if kb.Enabled() {
+				parts = append(parts, ui.StatusKey(kb.Help().Key, kb.Help().Desc))
+			}
 		}
 	}
 
 	// Always add global keys
 	parts = append(parts,
-		ui.StatusKey("tab", "next"),
+		ui.StatusKey("tab", "focus"),
+		ui.StatusKey("1-9", "jump"),
 		ui.StatusKey("?", "help"),
 		ui.StatusKey("q", "quit"),
 	)
