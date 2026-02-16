@@ -34,6 +34,7 @@ var stepLabels = [stepCount]string{
 
 type WorkspacePage struct {
 	workspace     *west.Workspace
+	health        west.WorkspaceHealth
 	updating      bool
 	output        strings.Builder
 	viewport      viewport.Model
@@ -57,6 +58,11 @@ func NewWorkspacePage(ws *west.Workspace) *WorkspacePage {
 func (p *WorkspacePage) Init() tea.Cmd { return nil }
 
 func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
+	// Refresh health status on each update
+	if p.workspace != nil {
+		p.health = p.workspace.CheckHealth()
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if p.updating || p.settingUp {
@@ -83,6 +89,12 @@ func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			p.settingUp = false
 			p.setupFailed = false
 			p.stepsDone = [stepCount]bool{}
+		case "r":
+			// Refresh health status
+			if p.workspace != nil {
+				p.health = p.workspace.CheckHealth()
+				p.message = "Status refreshed"
+			}
 		}
 
 	case west.CommandResultMsg:
@@ -193,9 +205,10 @@ func (p *WorkspacePage) View() string {
 		return b.String()
 	}
 
+	// Show setup progress during setup
 	if p.settingUp {
 		b.WriteString("  Setting up...\n\n")
-		b.WriteString(p.renderChecklist())
+		b.WriteString(p.renderSetupChecklist())
 		b.WriteString("\n")
 		b.WriteString(p.viewport.View())
 		return b.String()
@@ -203,24 +216,31 @@ func (p *WorkspacePage) View() string {
 
 	if p.setupFailed {
 		b.WriteString("  " + ui.ErrorBadge("Setup Failed") + "\n\n")
-		b.WriteString(p.renderChecklist())
+		b.WriteString(p.renderSetupChecklist())
 		b.WriteString("\n")
 		b.WriteString(p.viewport.View())
 		return b.String()
 	}
 
-	if !ws.Initialized {
-		b.WriteString("  " + ui.ErrorBadge("Not Initialized") + "\n\n")
-		b.WriteString("  Workspace found but not initialized.\n\n")
-		b.WriteString("  Setup steps:\n")
-		b.WriteString(p.renderChecklist())
-		b.WriteString("\n  Press 's' to start setup\n")
-		return b.String()
-	}
-
-	b.WriteString("  " + ui.SuccessBadge("Initialized") + "\n\n")
+	// Determine overall status badge
+	statusBadge := p.getStatusBadge()
+	b.WriteString("  " + statusBadge + "\n\n")
 	b.WriteString(fmt.Sprintf("  Root:     %s\n", ws.Root))
 	b.WriteString(fmt.Sprintf("  Manifest: %s\n", ws.ManifestPath))
+
+	// Always show health checklist
+	b.WriteString("\n  Setup Status:\n")
+	b.WriteString(p.renderHealthChecklist())
+
+	// Show actionable guidance if setup is incomplete
+	if !p.isFullySetup() {
+		b.WriteString("\n  " + ui.ErrorBadge("Action Required") + "\n")
+		if !ws.Initialized {
+			b.WriteString("  Press 's' to run full setup wizard\n")
+		} else {
+			b.WriteString("  Press 's' to complete missing setup steps\n")
+		}
+	}
 
 	if p.message != "" {
 		b.WriteString("\n  " + p.message + "\n")
@@ -234,7 +254,30 @@ func (p *WorkspacePage) View() string {
 	return b.String()
 }
 
-func (p *WorkspacePage) renderChecklist() string {
+// getStatusBadge returns the appropriate status badge based on workspace health
+func (p *WorkspacePage) getStatusBadge() string {
+	if !p.workspace.Initialized {
+		return ui.ErrorBadge("Not Initialized")
+	}
+
+	if p.isFullySetup() {
+		return ui.SuccessBadge("Ready")
+	}
+
+	return ui.ErrorBadge("Incomplete Setup")
+}
+
+// isFullySetup checks if all required components are ready
+func (p *WorkspacePage) isFullySetup() bool {
+	return p.health.WestInitialized &&
+		p.health.ModulesUpdated &&
+		p.health.ZephyrExported &&
+		p.health.PythonDepsOK &&
+		p.health.SdkInstalled
+}
+
+// renderSetupChecklist shows setup progress during the setup wizard
+func (p *WorkspacePage) renderSetupChecklist() string {
 	var b strings.Builder
 	for i := 0; i < int(stepCount); i++ {
 		step := setupStep(i)
@@ -252,6 +295,32 @@ func (p *WorkspacePage) renderChecklist() string {
 	return b.String()
 }
 
+// renderHealthChecklist shows the actual health status of workspace components
+func (p *WorkspacePage) renderHealthChecklist() string {
+	var b strings.Builder
+
+	checks := []struct {
+		label  string
+		status bool
+	}{
+		{"West workspace initialized", p.health.WestInitialized},
+		{"Zephyr modules updated", p.health.ModulesUpdated},
+		{"CMake packages exported", p.health.ZephyrExported},
+		{"Python dependencies installed", p.health.PythonDepsOK},
+		{"Zephyr SDK installed", p.health.SdkInstalled},
+	}
+
+	for _, check := range checks {
+		marker := "[ ]"
+		if check.status {
+			marker = "[✓]"
+		}
+		b.WriteString(fmt.Sprintf("  %s %s\n", marker, check.label))
+	}
+
+	return b.String()
+}
+
 func (p *WorkspacePage) Name() string { return "Workspace" }
 
 func (p *WorkspacePage) ShortHelp() []key.Binding {
@@ -263,14 +332,16 @@ func (p *WorkspacePage) ShortHelp() []key.Binding {
 
 	if p.workspace != nil && p.workspace.Initialized {
 		return []key.Binding{
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "run setup")),
 			key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "west update")),
-			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "run setup steps")),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh status")),
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear")),
 		}
 	}
 
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "setup")),
+		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh status")),
 		key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear")),
 	}
 }

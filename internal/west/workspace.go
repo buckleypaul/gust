@@ -14,6 +14,15 @@ type Workspace struct {
 	Initialized  bool   // Whether .west/ directory exists with config
 }
 
+// WorkspaceHealth tracks the status of all required workspace components.
+type WorkspaceHealth struct {
+	WestInitialized bool // .west/ directory exists
+	ModulesUpdated  bool // Zephyr and modules exist
+	ZephyrExported  bool // CMake package registry has Zephyr
+	PythonDepsOK    bool // Python dependencies installed
+	SdkInstalled    bool // Zephyr SDK is available
+}
+
 // DetectWorkspace walks up from startDir looking for a .west/ directory,
 // which is the standard marker for an initialized west workspace.
 // Falls back to looking for west.yml directly.
@@ -97,4 +106,90 @@ func ResolveManifest(root string) string {
 	}
 
 	return filepath.Join(root, manifestDir, manifestFile)
+}
+
+// CheckHealth performs health checks on the workspace to detect which setup steps are complete.
+func (w *Workspace) CheckHealth() WorkspaceHealth {
+	health := WorkspaceHealth{
+		WestInitialized: w.Initialized,
+	}
+
+	if w.Root == "" {
+		return health
+	}
+
+	// Check if zephyr directory exists (indicates modules were updated)
+	zephyrPath := filepath.Join(w.Root, "zephyr")
+	if info, err := os.Stat(zephyrPath); err == nil && info.IsDir() {
+		health.ModulesUpdated = true
+	}
+
+	// Check if CMake package registry has Zephyr (indicates zephyr-export was run)
+	// Look for ~/.cmake/packages/Zephyr/
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		cmakePackage := filepath.Join(homeDir, ".cmake", "packages", "Zephyr")
+		if info, err := os.Stat(cmakePackage); err == nil && info.IsDir() {
+			health.ZephyrExported = true
+		}
+	}
+
+	// Check if Python requirements are installed
+	// Look for common Python packages in the venv
+	venvPath := filepath.Join(w.Root, ".venv", "lib")
+	if info, err := os.Stat(venvPath); err == nil && info.IsDir() {
+		// If venv/lib exists and has content, assume deps are installed
+		// More sophisticated check could verify specific packages
+		health.PythonDepsOK = true
+	}
+
+	// Check if Zephyr SDK is installed
+	health.SdkInstalled = checkSdkInstalled()
+
+	return health
+}
+
+// checkSdkInstalled checks if the Zephyr SDK is available.
+// It checks:
+// 1. ZEPHYR_SDK_INSTALL_DIR environment variable
+// 2. Common installation locations
+func checkSdkInstalled() bool {
+	// Check environment variable first
+	if sdkDir := os.Getenv("ZEPHYR_SDK_INSTALL_DIR"); sdkDir != "" {
+		if info, err := os.Stat(sdkDir); err == nil && info.IsDir() {
+			return true
+		}
+	}
+
+	// Check common installation locations
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+
+	locations := []string{
+		filepath.Join(homeDir, "zephyr-sdk"),
+		filepath.Join("/opt", "zephyr-sdk"),
+	}
+
+	// Also check for versioned installations (e.g., ~/zephyr-sdk-0.17.4)
+	if entries, err := os.ReadDir(homeDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && strings.HasPrefix(entry.Name(), "zephyr-sdk-") {
+				locations = append(locations, filepath.Join(homeDir, entry.Name()))
+			}
+		}
+	}
+
+	for _, loc := range locations {
+		if info, err := os.Stat(loc); err == nil && info.IsDir() {
+			// Verify it's a real SDK by checking for cmake/ subdirectory
+			cmakeDir := filepath.Join(loc, "cmake")
+			if cmakeInfo, err := os.Stat(cmakeDir); err == nil && cmakeInfo.IsDir() {
+				return true
+			}
+		}
+	}
+
+	return false
 }
