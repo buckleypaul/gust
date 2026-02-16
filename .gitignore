@@ -23,3 +23,6 @@ Thumbs.db
 
 # Gust local data
 .gust/
+
+# Claude local overrides
+.claude.local.md
