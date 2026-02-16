@@ -58,6 +58,7 @@ var (
 			MarginBottom(1)
 
 	// General
-	BoldStyle = lipgloss.NewStyle().Bold(true)
-	DimStyle  = lipgloss.NewStyle().Foreground(TextDim)
+	BoldStyle   = lipgloss.NewStyle().Bold(true)
+	DimStyle    = lipgloss.NewStyle().Foreground(TextDim)
+	AccentStyle = lipgloss.NewStyle().Foreground(Accent)
 )

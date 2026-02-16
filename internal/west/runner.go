@@ -21,16 +21,11 @@ type CommandCompletedMsg struct {
 	Err      error
 }
 
-// RunStreaming executes a command and streams output line-by-line as tea.Msg.
-// It returns a tea.Cmd that, when run by bubbletea, sends CommandOutputMsg
-// for each line and a final CommandCompletedMsg.
+// RunStreaming executes a command and returns all output when complete.
+// Note: Despite the name, this currently batches output for simplicity.
+// True line-by-line streaming would require subscription-based architecture.
 func RunStreaming(name string, args ...string) tea.Cmd {
 	return func() tea.Msg {
-		// We can't stream from inside a single tea.Cmd return,
-		// so we'll collect all output and return a batch result.
-		// For true streaming, we'll use a channel-based approach
-		// via the program's Send method (done in the page layer).
-		// For now, return a collected result.
 		start := time.Now()
 		cmd := exec.Command(name, args...)
 		applyEnv(cmd)
@@ -43,11 +38,14 @@ func RunStreaming(name string, args ...string) tea.Cmd {
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				exitCode = exitErr.ExitCode()
 			} else {
-				return CommandCompletedMsg{ExitCode: -1, Duration: duration, Err: err}
+				return CommandResultMsg{
+					Output:   string(output),
+					ExitCode: -1,
+					Duration: duration,
+				}
 			}
 		}
 
-		// Return a combined message with all output
 		return CommandResultMsg{
 			Output:   string(output),
 			ExitCode: exitCode,

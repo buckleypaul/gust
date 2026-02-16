@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -38,6 +39,7 @@ type WorkspacePage struct {
 	updating      bool
 	output        strings.Builder
 	viewport      viewport.Model
+	spinner       spinner.Model
 	width, height int
 	message       string
 
@@ -49,13 +51,17 @@ type WorkspacePage struct {
 
 func NewWorkspacePage(ws *west.Workspace) *WorkspacePage {
 	vp := viewport.New(0, 0)
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = ui.AccentStyle
 	return &WorkspacePage{
 		workspace: ws,
 		viewport:  vp,
+		spinner:   s,
 	}
 }
 
-func (p *WorkspacePage) Init() tea.Cmd { return nil }
+func (p *WorkspacePage) Init() tea.Cmd { return p.spinner.Tick }
 
 func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 	// Refresh health status on each update
@@ -63,10 +69,15 @@ func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		p.health = p.workspace.CheckHealth()
 	}
 
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		p.spinner, cmd = p.spinner.Update(msg)
+		return p, cmd
+
 	case tea.KeyMsg:
 		if p.updating || p.settingUp {
-			var cmd tea.Cmd
 			p.viewport, cmd = p.viewport.Update(msg)
 			return p, cmd
 		}
@@ -115,7 +126,6 @@ func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		return p, nil
 	}
 
-	var cmd tea.Cmd
 	p.viewport, cmd = p.viewport.Update(msg)
 	return p, cmd
 }
@@ -140,6 +150,7 @@ func (p *WorkspacePage) startSetup() tea.Cmd {
 func (p *WorkspacePage) startStep() tea.Cmd {
 	label := stepLabels[p.currentStep]
 	p.output.WriteString(fmt.Sprintf("=== %s ===\n", label))
+	p.output.WriteString("Running...\n\n")
 	p.viewport.SetContent(p.output.String())
 	p.viewport.GotoBottom()
 
@@ -282,15 +293,20 @@ func (p *WorkspacePage) renderSetupChecklist() string {
 	for i := 0; i < int(stepCount); i++ {
 		step := setupStep(i)
 		var marker string
+		var label string
 		switch {
 		case p.stepsDone[step]:
 			marker = "[✓]"
+			label = stepLabels[step]
 		case p.settingUp && step == p.currentStep:
-			marker = "[►]"
+			// Show spinner for currently running step
+			marker = p.spinner.View()
+			label = stepLabels[step] + " (running...)"
 		default:
 			marker = "[ ]"
+			label = stepLabels[step]
 		}
-		b.WriteString(fmt.Sprintf("  %s %s\n", marker, stepLabels[step]))
+		b.WriteString(fmt.Sprintf("  %s %s\n", marker, label))
 	}
 	return b.String()
 }
