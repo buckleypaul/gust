@@ -3,6 +3,7 @@ package west
 import (
 	"bufio"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -16,6 +17,7 @@ type Workspace struct {
 
 // WorkspaceHealth tracks the status of all required workspace components.
 type WorkspaceHealth struct {
+	BrewDepsOK      bool // Required Homebrew packages installed
 	WestInitialized bool // .west/ directory exists
 	ModulesUpdated  bool // Zephyr and modules exist
 	ZephyrExported  bool // CMake package registry has Zephyr
@@ -112,6 +114,7 @@ func ResolveManifest(root string) string {
 func (w *Workspace) CheckHealth() WorkspaceHealth {
 	health := WorkspaceHealth{
 		WestInitialized: w.Initialized,
+		BrewDepsOK:      checkBrewDeps(),
 	}
 
 	if w.Root == "" {
@@ -192,4 +195,29 @@ func checkSdkInstalled() bool {
 	}
 
 	return false
+}
+
+// checkBrewDeps checks if all required Homebrew packages are installed.
+func checkBrewDeps() bool {
+	// Check if brew is available
+	brewCmd, err := exec.LookPath("brew")
+	if err != nil {
+		return false
+	}
+
+	// List of required packages (imported from commands.go conceptually, but duplicated here for simplicity)
+	required := []string{
+		"cmake", "ninja", "gperf", "python3", "python-tk",
+		"ccache", "qemu", "dtc", "libmagic", "wget", "openocd",
+	}
+
+	// Check each package
+	for _, pkg := range required {
+		cmd := exec.Command(brewCmd, "list", pkg)
+		if err := cmd.Run(); err != nil {
+			return false // At least one package is missing
+		}
+	}
+
+	return true // All packages are installed
 }

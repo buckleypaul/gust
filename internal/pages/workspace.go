@@ -17,7 +17,8 @@ import (
 type setupStep int
 
 const (
-	stepInit setupStep = iota
+	stepBrewDeps setupStep = iota
+	stepInit
 	stepUpdate
 	stepExport
 	stepPipInstall
@@ -26,6 +27,7 @@ const (
 )
 
 var stepLabels = [stepCount]string{
+	"Install system dependencies (Homebrew)",
 	"Initialize workspace (west init)",
 	"Update modules (west update)",
 	"Export CMake packages (west zephyr-export)",
@@ -54,21 +56,24 @@ func NewWorkspacePage(ws *west.Workspace) *WorkspacePage {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = ui.AccentStyle
-	return &WorkspacePage{
+
+	page := &WorkspacePage{
 		workspace: ws,
 		viewport:  vp,
 		spinner:   s,
 	}
+
+	// Initial health check
+	if ws != nil {
+		page.health = ws.CheckHealth()
+	}
+
+	return page
 }
 
 func (p *WorkspacePage) Init() tea.Cmd { return p.spinner.Tick }
 
 func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
-	// Refresh health status on each update
-	if p.workspace != nil {
-		p.health = p.workspace.CheckHealth()
-	}
-
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -137,11 +142,12 @@ func (p *WorkspacePage) startSetup() tea.Cmd {
 	p.output.Reset()
 	p.message = ""
 
+	// Always start with brew deps check (step 0)
+	p.currentStep = stepBrewDeps
+
+	// Mark west init as done if workspace already initialized
 	if p.workspace != nil && p.workspace.Initialized {
-		p.currentStep = stepUpdate
 		p.stepsDone[stepInit] = true
-	} else {
-		p.currentStep = stepInit
 	}
 
 	return p.startStep()
@@ -155,6 +161,8 @@ func (p *WorkspacePage) startStep() tea.Cmd {
 	p.viewport.GotoBottom()
 
 	switch p.currentStep {
+	case stepBrewDeps:
+		return west.InstallBrewDeps()
 	case stepInit:
 		return west.Init()
 	case stepUpdate:
@@ -180,6 +188,11 @@ func (p *WorkspacePage) handleSetupResult(msg west.CommandResultMsg) tea.Cmd {
 		p.output.WriteString(fmt.Sprintf("\n%s\n", p.message))
 		p.viewport.SetContent(p.output.String())
 		p.viewport.GotoBottom()
+
+		// Refresh health after failure
+		if p.workspace != nil {
+			p.health = p.workspace.CheckHealth()
+		}
 		return nil
 	}
 
@@ -197,6 +210,8 @@ func (p *WorkspacePage) handleSetupResult(msg west.CommandResultMsg) tea.Cmd {
 		if p.workspace != nil {
 			p.workspace.Initialized = true
 			p.workspace.ManifestPath = west.ResolveManifest(p.workspace.Root)
+			// Refresh health after completion
+			p.health = p.workspace.CheckHealth()
 		}
 		return nil
 	}
@@ -280,7 +295,8 @@ func (p *WorkspacePage) getStatusBadge() string {
 
 // isFullySetup checks if all required components are ready
 func (p *WorkspacePage) isFullySetup() bool {
-	return p.health.WestInitialized &&
+	return p.health.BrewDepsOK &&
+		p.health.WestInitialized &&
 		p.health.ModulesUpdated &&
 		p.health.ZephyrExported &&
 		p.health.PythonDepsOK &&
@@ -319,6 +335,7 @@ func (p *WorkspacePage) renderHealthChecklist() string {
 		label  string
 		status bool
 	}{
+		{"System dependencies (Homebrew)", p.health.BrewDepsOK},
 		{"West workspace initialized", p.health.WestInitialized},
 		{"Zephyr modules updated", p.health.ModulesUpdated},
 		{"CMake packages exported", p.health.ZephyrExported},
