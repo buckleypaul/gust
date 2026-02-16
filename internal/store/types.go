@@ -10,6 +10,9 @@ type BuildRecord struct {
 	Success   bool      `json:"success"`
 	Duration  string    `json:"duration"`
 	Artifacts []string  `json:"artifacts"`
+	Shield    string    `json:"shield,omitempty"`
+	Pristine  bool      `json:"pristine,omitempty"`
+	CMakeArgs string    `json:"cmake_args,omitempty"`
 }
 
 // FlashRecord captures the result of a flash operation.
