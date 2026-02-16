@@ -1,0 +1,43 @@
+package app
+
+import (
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+// PageID identifies each page in the application.
+type PageID int
+
+const (
+	WorkspacePage PageID = iota
+	BuildPage
+	FlashPage
+	MonitorPage
+	TestPage
+	ArtifactsPage
+	WestPage
+	ConfigPage
+	SettingsPage
+)
+
+var PageOrder = []PageID{
+	WorkspacePage,
+	BuildPage,
+	FlashPage,
+	MonitorPage,
+	TestPage,
+	ArtifactsPage,
+	WestPage,
+	ConfigPage,
+	SettingsPage,
+}
+
+// Page is the interface every page in the application implements.
+type Page interface {
+	Init() tea.Cmd
+	Update(msg tea.Msg) (Page, tea.Cmd)
+	View() string
+	Name() string
+	ShortHelp() []key.Binding
+	SetSize(width, height int)
+}
