@@ -2,7 +2,9 @@ package pages
 
 import (
 	"fmt"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -11,6 +13,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/ansi"
+	"github.com/muesli/reflow/truncate"
+	"github.com/muesli/reflow/wrap"
 
 	"github.com/buckleypaul/gust/internal/app"
 	"github.com/buckleypaul/gust/internal/config"
@@ -151,7 +156,7 @@ func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			status = fmt.Sprintf("failed (exit code: %d)", msg.ExitCode)
 		}
 		p.output.WriteString(fmt.Sprintf("\nBuild %s in %s\n", status, msg.Duration))
-		p.viewport.SetContent(p.output.String())
+		p.updateViewportContent()
 		p.viewport.GotoBottom()
 
 		// Record build
@@ -234,11 +239,16 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		return p, nil
 	case "ctrl+b":
 		return p, p.startBuild()
+	case "y":
+		if p.output.Len() > 0 {
+			p.copyToClipboard()
+		}
+		return p, nil
 	case "esc":
 		if p.state == buildStateDone {
 			p.state = buildStateIdle
 			p.output.Reset()
-			p.viewport.SetContent("")
+			p.updateViewportContent()
 			return p, nil
 		}
 		p.blurAll()
@@ -248,9 +258,20 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 	// Field-specific handling
 	switch p.focusedField {
 	case fieldBoard:
-		if keyStr == "down" && len(p.filteredBoards) > 0 {
-			p.boardListOpen = true
-			p.boardCursor = 0
+		if keyStr == "down" {
+			if len(p.filteredBoards) > 0 && !p.boardListOpen {
+				// Open dropdown on first down press
+				p.boardListOpen = true
+				p.boardCursor = 0
+				return p, nil
+			} else if !p.boardListOpen {
+				// No dropdown, move to next field
+				p.advanceField(1)
+				return p, nil
+			}
+		}
+		if keyStr == "up" && !p.boardListOpen {
+			p.advanceField(-1)
 			return p, nil
 		}
 		if keyStr == "enter" {
@@ -267,31 +288,59 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		return p, cmd
 
 	case fieldPristine:
-		if keyStr == "enter" || keyStr == " " {
+		switch keyStr {
+		case "enter", " ":
 			p.pristine = !p.pristine
+			return p, nil
+		case "up", "k":
+			p.advanceField(-1)
+			return p, nil
+		case "down", "j":
+			p.advanceField(1)
 			return p, nil
 		}
 		return p, nil
 
 	case fieldProject:
-		if keyStr == "enter" {
+		switch keyStr {
+		case "enter":
 			return p, p.startBuild()
+		case "up", "k":
+			p.advanceField(-1)
+			return p, nil
+		case "down", "j":
+			p.advanceField(1)
+			return p, nil
 		}
 		var cmd tea.Cmd
 		p.projectInput, cmd = p.projectInput.Update(msg)
 		return p, cmd
 
 	case fieldShield:
-		if keyStr == "enter" {
+		switch keyStr {
+		case "enter":
 			return p, p.startBuild()
+		case "up", "k":
+			p.advanceField(-1)
+			return p, nil
+		case "down", "j":
+			p.advanceField(1)
+			return p, nil
 		}
 		var cmd tea.Cmd
 		p.shieldInput, cmd = p.shieldInput.Update(msg)
 		return p, cmd
 
 	case fieldCMakeArgs:
-		if keyStr == "enter" {
+		switch keyStr {
+		case "enter":
 			return p, p.startBuild()
+		case "up", "k":
+			p.advanceField(-1)
+			return p, nil
+		case "down", "j":
+			p.advanceField(1)
+			return p, nil
 		}
 		var cmd tea.Cmd
 		p.cmakeInput, cmd = p.cmakeInput.Update(msg)
@@ -345,22 +394,26 @@ func (p *BuildPage) focusCurrent() {
 }
 
 func (p *BuildPage) View() string {
-	leftWidth := p.width * 40 / 100
-	if leftWidth < minLeftWidth {
-		leftWidth = minLeftWidth
+	// Split vertically: form on top, output below
+	formHeight := 12 // Fixed height for form
+	if p.focusedField == fieldBoard && len(p.filteredBoards) > 0 {
+		// Add space for board dropdown
+		formHeight += maxDropdownItems + 2
 	}
-	if leftWidth > maxLeftWidth {
-		leftWidth = maxLeftWidth
+	outputHeight := p.height - formHeight - 1 // -1 for separator
+
+	if outputHeight < 5 {
+		outputHeight = 5
+		formHeight = p.height - outputHeight - 1
 	}
-	rightWidth := p.width - leftWidth - 2 // gap
 
-	left := p.viewForm(leftWidth)
-	right := p.viewOutput(rightWidth)
+	form := p.viewForm(p.width, formHeight)
+	output := p.viewOutput(p.width, outputHeight)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	return lipgloss.JoinVertical(lipgloss.Left, form, output)
 }
 
-func (p *BuildPage) viewForm(width int) string {
+func (p *BuildPage) viewForm(width int, height int) string {
 	var b strings.Builder
 	b.WriteString(ui.Title("Build"))
 	b.WriteString("\n")
@@ -425,7 +478,11 @@ func (p *BuildPage) viewForm(width int) string {
 	b.WriteString(renderLabel("CMake", fieldCMakeArgs) + " " + p.cmakeInput.View() + "\n")
 
 	b.WriteString("\n")
-	b.WriteString(ui.DimStyle.Render("ctrl+b: build  tab: next field  esc: unfocus"))
+	helpText := "ctrl+b: build  tab: next field  esc: unfocus"
+	if p.output.Len() > 0 {
+		helpText += "  y: copy output"
+	}
+	b.WriteString(ui.DimStyle.Render(helpText))
 
 	return b.String()
 }
@@ -477,14 +534,36 @@ func (p *BuildPage) renderBoardDropdown(width int) string {
 	return b.String()
 }
 
-func (p *BuildPage) viewOutput(width int) string {
+func (p *BuildPage) viewOutput(width int, height int) string {
+	// Account for border (2 chars top+bottom) and padding (1 char left)
+	contentWidth := width - 3
+	contentHeight := height - 2
+
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
+	if contentHeight < 3 {
+		contentHeight = 3
+	}
+
+	// Update viewport size to match available space
+	oldWidth := p.viewport.Width
+	p.viewport.Width = contentWidth
+	p.viewport.Height = contentHeight
+
+	// Re-wrap content if width changed
+	if oldWidth != contentWidth && p.output.Len() > 0 {
+		p.updateViewportContent()
+	}
+
 	style := lipgloss.NewStyle().
 		Width(width).
-		Height(p.height - 2).
-		PaddingLeft(1).
+		Height(height).
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderLeft(true).
-		BorderForeground(ui.Surface)
+		BorderTop(true).
+		BorderForeground(ui.Surface).
+		PaddingLeft(1).
+		PaddingTop(0)
 
 	if p.output.Len() == 0 {
 		content := ui.DimStyle.Render("Build output will appear here...")
@@ -502,23 +581,21 @@ func (p *BuildPage) ShortHelp() []key.Binding {
 			key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "cancel")),
 		}
 	}
-	return []key.Binding{
+	bindings := []key.Binding{
 		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next field")),
 		key.NewBinding(key.WithKeys("ctrl+b"), key.WithHelp("ctrl+b", "build")),
 		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "unfocus")),
 	}
+	if p.output.Len() > 0 {
+		bindings = append(bindings, key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy output")))
+	}
+	return bindings
 }
 
 func (p *BuildPage) SetSize(w, h int) {
 	p.width = w
 	p.height = h
-
-	rightWidth := w - maxLeftWidth - 2
-	if rightWidth < 20 {
-		rightWidth = 20
-	}
-	p.viewport.Width = rightWidth - 4
-	p.viewport.Height = h - 4
+	// Viewport size will be set dynamically in viewOutput()
 }
 
 func (p *BuildPage) filterBoards() {
@@ -547,6 +624,26 @@ func (p *BuildPage) projectValue() string {
 		return "."
 	}
 	return v
+}
+
+func (p *BuildPage) updateViewportContent() {
+	if p.viewport.Width > 0 {
+		// Use hard wrap to handle long paths/commands that don't have spaces
+		content := p.output.String()
+		wrapped := wrap.String(content, p.viewport.Width)
+
+		// Additional safety: truncate any lines that are still too long (ANSI-aware)
+		lines := strings.Split(wrapped, "\n")
+		for i, line := range lines {
+			// Check printable width (excluding ANSI codes)
+			if ansi.PrintableRuneWidth(line) > p.viewport.Width {
+				lines[i] = truncate.String(line, uint(p.viewport.Width))
+			}
+		}
+		p.viewport.SetContent(strings.Join(lines, "\n"))
+	} else {
+		p.viewport.SetContent(p.output.String())
+	}
 }
 
 func (p *BuildPage) startBuild() tea.Cmd {
@@ -586,7 +683,51 @@ func (p *BuildPage) startBuild() tea.Cmd {
 		label = fmt.Sprintf("Building (pristine) for %s", board)
 	}
 	p.output.WriteString(label + "...\n\n")
-	p.viewport.SetContent(p.output.String())
+	p.updateViewportContent()
 
 	return west.RunStreaming("west", args...)
+}
+
+func (p *BuildPage) copyToClipboard() {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		// Try wl-copy (Wayland) first, fall back to xclip (X11)
+		if _, err := exec.LookPath("wl-copy"); err == nil {
+			cmd = exec.Command("wl-copy")
+		} else {
+			cmd = exec.Command("xclip", "-selection", "clipboard")
+		}
+	default:
+		p.message = "Clipboard copy not supported on this platform"
+		return
+	}
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		p.message = fmt.Sprintf("Failed to copy: %v", err)
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		p.message = fmt.Sprintf("Failed to copy: %v", err)
+		return
+	}
+
+	if _, err := stdin.Write([]byte(p.output.String())); err != nil {
+		p.message = fmt.Sprintf("Failed to copy: %v", err)
+		stdin.Close()
+		cmd.Wait()
+		return
+	}
+	stdin.Close()
+
+	if err := cmd.Wait(); err != nil {
+		p.message = fmt.Sprintf("Failed to copy: %v", err)
+		return
+	}
+
+	p.message = "Build output copied to clipboard"
 }
