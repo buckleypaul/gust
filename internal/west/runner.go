@@ -33,6 +33,7 @@ func RunStreaming(name string, args ...string) tea.Cmd {
 		// For now, return a collected result.
 		start := time.Now()
 		cmd := exec.Command(name, args...)
+		applyEnv(cmd)
 
 		output, err := cmd.CombinedOutput()
 		duration := time.Since(start)
@@ -67,6 +68,7 @@ type CommandResultMsg struct {
 func StreamCommand(p *tea.Program, name string, args ...string) {
 	start := time.Now()
 	cmd := exec.Command(name, args...)
+	applyEnv(cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -103,6 +105,7 @@ func StreamCommand(p *tea.Program, name string, args ...string) {
 // RunSimple executes a command and returns the output as a single string.
 func RunSimple(name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
+	applyEnv(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("%s: %w", name, err)

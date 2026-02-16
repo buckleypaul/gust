@@ -18,6 +18,7 @@ type Config struct {
 	SerialPort     string `json:"serial_port,omitempty"`
 	SerialBaudRate int    `json:"serial_baud_rate,omitempty"`
 	FlashRunner    string `json:"flash_runner,omitempty"`
+	VenvPath       string `json:"venv_path,omitempty"`
 }
 
 // Defaults returns a Config with default values.
@@ -99,5 +100,8 @@ func mergeFromFile(cfg *Config, path string) {
 	}
 	if fileCfg.FlashRunner != "" {
 		cfg.FlashRunner = fileCfg.FlashRunner
+	}
+	if fileCfg.VenvPath != "" {
+		cfg.VenvPath = fileCfg.VenvPath
 	}
 }

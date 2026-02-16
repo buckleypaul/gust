@@ -28,6 +28,7 @@ func main() {
 	}
 
 	cfg := config.Load(ws.Root)
+	west.InitEnv(ws, cfg.VenvPath)
 	st := store.New(filepath.Join(ws.Root, ".gust"))
 
 	pageMap := map[app.PageID]app.Page{
