@@ -113,15 +113,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Delegate to active page only if content is focused
-	if m.focus == FocusContent {
+	// Key messages: only forward to active page when content is focused
+	if _, isKey := msg.(tea.KeyMsg); isKey {
+		if m.focus != FocusContent {
+			return m, nil
+		}
 		page := m.pages[m.activePage]
 		newPage, cmd := page.Update(msg)
 		m.pages[m.activePage] = newPage
 		return m, cmd
 	}
 
-	return m, nil
+	// Non-key messages (command results, etc.): forward to all pages
+	// so responses reach the page that initiated the command
+	var cmds []tea.Cmd
+	for id, page := range m.pages {
+		newPage, cmd := page.Update(msg)
+		m.pages[id] = newPage
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
