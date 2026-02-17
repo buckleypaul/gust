@@ -53,3 +53,12 @@ type InputCapturer interface {
 type ProjectSelectedMsg struct {
 	Path string
 }
+// BoardSelectedMsg is broadcast to all pages when a board is selected.
+type BoardSelectedMsg struct {
+	Board string
+}
+
+// ShieldSelectedMsg is broadcast to all pages when a shield is selected.
+type ShieldSelectedMsg struct {
+	Shield string
+}
