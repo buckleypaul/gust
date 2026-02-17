@@ -265,7 +265,7 @@ func (p *BuildPage) View() string {
 		formHeight = p.height - outputHeight - 1
 	}
 
-	form := p.viewForm(p.width, formHeight)
+	form := ui.Panel("Configuration", p.viewForm(p.width, formHeight), p.width, formHeight, false)
 	output := p.viewOutput(p.width, outputHeight)
 
 	return lipgloss.JoinVertical(lipgloss.Left, form, output)
@@ -273,8 +273,6 @@ func (p *BuildPage) View() string {
 
 func (p *BuildPage) viewForm(width int, height int) string {
 	var b strings.Builder
-	b.WriteString(ui.Title("Build"))
-	b.WriteString("\n")
 
 	if p.message != "" {
 		b.WriteString(p.message + "\n\n")
@@ -342,8 +340,8 @@ func (p *BuildPage) viewForm(width int, height int) string {
 }
 
 func (p *BuildPage) viewOutput(width int, height int) string {
-	// Account for border (2 chars top+bottom) and padding (1 char left)
-	contentWidth := width - 3
+	// Account for panel border (2 top/bottom) and padding (2 left/right) and 2 border sides
+	contentWidth := width - 4
 	contentHeight := height - 2
 
 	if contentWidth < 10 {
@@ -363,21 +361,14 @@ func (p *BuildPage) viewOutput(width int, height int) string {
 		p.updateViewportContent()
 	}
 
-	style := lipgloss.NewStyle().
-		Width(width).
-		Height(height).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderTop(true).
-		BorderForeground(ui.Surface).
-		PaddingLeft(1).
-		PaddingTop(0)
-
+	var content string
 	if p.output.Len() == 0 {
-		content := ui.DimStyle.Render("Build output will appear here...")
-		return style.Render(content)
+		content = ui.DimStyle.Render("Build output will appear here...")
+	} else {
+		content = p.viewport.View()
 	}
 
-	return style.Render(p.viewport.View())
+	return ui.Panel("Output", content, width, height, false)
 }
 
 func (p *BuildPage) Name() string { return "Build" }

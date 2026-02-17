@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -10,7 +9,7 @@ import (
 	"github.com/buckleypaul/gust/internal/ui"
 )
 
-const sidebarWidth = 22 // 20 content + 2 border/padding
+const sidebarWidth = 26 // 20 content + 2 padding + 2 border + 2 extra
 
 func renderProjectBar(selectedProject, selectedBoard string, width int) string {
 	projectDisplay := selectedProject
@@ -21,20 +20,21 @@ func renderProjectBar(selectedProject, selectedBoard string, width int) string {
 	if boardDisplay == "" {
 		boardDisplay = "(none)"
 	}
-	content := fmt.Sprintf("Project: %s  Board: %s", projectDisplay, boardDisplay)
+
+	left := "  Project: " + projectDisplay
+	right := "Board: " + boardDisplay + "  "
+
+	// Pad between left and right zones
+	gap := width - len(left) - len(right)
+	if gap < 1 {
+		gap = 1
+	}
+	content := left + strings.Repeat(" ", gap) + right
 	return ui.StatusBarStyle.Width(width).Render(content)
 }
 
 func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, height int, focused bool) string {
 	var b strings.Builder
-	title := "gust"
-	if focused {
-		title = ui.BoldStyle.Render("gust [FOCUSED]")
-	} else {
-		title = ui.TitleStyle.Render("gust")
-	}
-	b.WriteString(title)
-	b.WriteString("\n\n")
 
 	for _, id := range pages {
 		p := pageMap[id]
@@ -46,14 +46,10 @@ func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, heigh
 		b.WriteString("\n")
 	}
 
-	style := ui.SidebarStyle.Height(height)
-	if focused {
-		style = style.BorderForeground(ui.Primary)
-	}
-	return style.Render(b.String())
+	return ui.Panel("gust", b.String(), sidebarWidth, height, focused)
 }
 
-func renderStatusBar(pageHelp []key.Binding, width int, focus FocusArea) string {
+func renderStatusBar(pageHelp []key.Binding, width int, focus FocusArea, wsRoot string) string {
 	var parts []string
 
 	// Focus-specific instructions
@@ -78,8 +74,27 @@ func renderStatusBar(pageHelp []key.Binding, width int, focus FocusArea) string 
 		ui.StatusKey("q", "quit"),
 	)
 
-	line := strings.Join(parts, "  ")
-	return ui.StatusBarStyle.Width(width).Render(line)
+	left := strings.Join(parts, "  ")
+
+	// Right zone: truncated workspace path
+	wsDisplay := wsRoot
+	if len(wsDisplay) > 22 {
+		wsDisplay = "…" + wsDisplay[len(wsDisplay)-21:]
+	}
+	right := wsDisplay
+
+	// Build left+right layout
+	leftRendered := ui.StatusBarStyle.Render(left)
+	rightRendered := ui.StatusBarStyle.Render(right)
+
+	leftWidth := lipgloss.Width(leftRendered)
+	rightWidth := lipgloss.Width(rightRendered)
+	gap := width - leftWidth - rightWidth
+	if gap < 1 {
+		gap = 1
+	}
+	filler := ui.StatusBarStyle.Width(gap).Render("")
+	return leftRendered + filler + rightRendered
 }
 
 func renderLayout(projectBar, sidebar, content, statusBar string) string {

@@ -107,32 +107,33 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 }
 
 func (p *FlashPage) View() string {
-	var b strings.Builder
-	b.WriteString(ui.Title("Flash"))
-	b.WriteString("\n")
-
-	if p.selectedProject != "" {
-		b.WriteString(fmt.Sprintf("  Project: %s\n", p.selectedProject))
-	}
-
 	p.refreshLastBuild()
 
+	// Status section
+	var statusB strings.Builder
+	if p.selectedProject != "" {
+		statusB.WriteString(fmt.Sprintf("  Project: %s\n", p.selectedProject))
+	}
 	if p.lastBuild != nil {
-		b.WriteString(fmt.Sprintf("  Last build: %s (%s)\n",
+		statusB.WriteString(fmt.Sprintf("  Last build: %s (%s)\n",
 			p.lastBuild.Board,
 			p.lastBuild.Timestamp.Format("2006-01-02 15:04:05")))
 		if p.lastBuild.Success {
-			b.WriteString("  Status: " + ui.SuccessBadge("OK") + "\n")
+			statusB.WriteString("  Status: " + ui.SuccessBadge("OK") + "\n")
 		} else {
-			b.WriteString("  Status: " + ui.ErrorBadge("FAILED") + "\n")
+			statusB.WriteString("  Status: " + ui.ErrorBadge("FAILED") + "\n")
 		}
 	} else {
-		b.WriteString(ui.DimStyle.Render("  No recent builds found. Build first.") + "\n")
+		statusB.WriteString(ui.DimStyle.Render("  No recent builds found. Build first.") + "\n")
 	}
+	statusPanel := ui.Panel("Status", statusB.String(), p.width, 0, false)
+
+	var b strings.Builder
+	b.WriteString(statusPanel)
 
 	if p.output.Len() > 0 {
 		b.WriteString("\n")
-		b.WriteString(p.viewport.View())
+		b.WriteString(ui.Panel("Output", p.viewport.View(), p.width, 0, false))
 	}
 
 	return b.String()

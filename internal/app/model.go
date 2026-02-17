@@ -57,10 +57,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		contentWidth := m.width - sidebarWidth
-		contentHeight := m.height - 2 - 1 // status bar + project bar
+		contentWidth := m.width - sidebarWidth   // outer width of content panel
+		innerWidth := contentWidth - 4            // -2 border -2 padding
+		contentHeight := m.height - 2 - 1 - 2    // status bar + project bar + top/bottom panel border
+		if innerWidth < 0 {
+			innerWidth = 0
+		}
+		if contentHeight < 0 {
+			contentHeight = 0
+		}
 		for _, p := range m.pages {
-			p.SetSize(contentWidth, contentHeight)
+			p.SetSize(innerWidth, contentHeight)
 		}
 		return m, nil
 
@@ -183,19 +190,16 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	contentWidth := m.width - sidebarWidth
-	contentHeight := m.height - 2 - 1 // status bar + project bar
+	contentWidth := m.width - sidebarWidth   // outer width of content panel
+	contentHeight := m.height - 2 - 1        // status bar + project bar
 
 	page := m.pages[m.activePage]
 
 	projectBar := renderProjectBar(m.selectedProject, m.selectedBoard, m.width)
 	sidebar := renderSidebar(PageOrder, m.activePage, m.pages, contentHeight, m.focus == FocusSidebar)
-	content := ui.ContentStyle.
-		Width(contentWidth).
-		Height(contentHeight).
-		Render(page.View())
+	content := ui.Panel(page.Name(), page.View(), contentWidth, contentHeight, m.focus == FocusContent)
 
-	statusBar := renderStatusBar(page.ShortHelp(), m.width, m.focus)
+	statusBar := renderStatusBar(page.ShortHelp(), m.width, m.focus, m.wsRoot)
 
 	return renderLayout(projectBar, sidebar, content, statusBar)
 }
@@ -217,4 +221,3 @@ func (m *Model) prevPage() {
 		}
 	}
 }
-

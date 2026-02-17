@@ -112,22 +112,21 @@ func (p *WestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 func (p *WestPage) View() string {
 	var b strings.Builder
-	b.WriteString(ui.Title("West"))
-	b.WriteString("\n")
 
-	// Command list
+	// Command panel
+	var cmdB strings.Builder
 	for i, c := range p.commands {
 		cursor := "  "
 		if i == p.cursor {
 			cursor = ui.BoldStyle.Render("> ")
 		}
-		b.WriteString(fmt.Sprintf("%s%-10s %s\n", cursor, c.name, ui.DimStyle.Render(c.desc)))
+		cmdB.WriteString(fmt.Sprintf("%s%-10s %s\n", cursor, c.name, ui.DimStyle.Render(c.desc)))
 	}
-
-	b.WriteString("\n")
+	b.WriteString(ui.Panel("Command", cmdB.String(), p.width, 0, false))
 
 	if p.output.Len() > 0 {
-		b.WriteString(p.viewport.View())
+		b.WriteString("\n")
+		b.WriteString(ui.Panel("Output", p.viewport.View(), p.width, 0, false))
 	}
 
 	return b.String()

@@ -94,20 +94,21 @@ func (p *TestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 func (p *TestPage) View() string {
 	var b strings.Builder
-	b.WriteString(ui.Title("Test"))
-	b.WriteString("\n")
 
+	// Configuration/status panel
+	var cfgB strings.Builder
 	if p.message != "" {
-		b.WriteString("  " + p.message + "\n\n")
+		cfgB.WriteString("  " + p.message + "\n")
 	}
-
 	if !p.running && p.output.Len() == 0 {
-		b.WriteString(ui.DimStyle.Render("  Press t or Enter to run tests."))
-		b.WriteString("\n")
+		cfgB.WriteString(ui.DimStyle.Render("  Press t or Enter to run tests."))
+		cfgB.WriteString("\n")
 	}
+	b.WriteString(ui.Panel("Configuration", cfgB.String(), p.width, 0, false))
 
 	if p.output.Len() > 0 {
-		b.WriteString(p.viewport.View())
+		b.WriteString("\n")
+		b.WriteString(ui.Panel("Output", p.viewport.View(), p.width, 0, false))
 	}
 
 	return b.String()

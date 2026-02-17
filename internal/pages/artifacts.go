@@ -50,8 +50,6 @@ func (p *ArtifactsPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 func (p *ArtifactsPage) View() string {
 	var b strings.Builder
-	b.WriteString(ui.Title("Artifacts"))
-	b.WriteString("\n")
 
 	// Tab bar
 	for i, name := range tabNames {

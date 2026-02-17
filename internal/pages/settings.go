@@ -95,9 +95,7 @@ func (p *SettingsPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 }
 
 func (p *SettingsPage) View() string {
-	var b strings.Builder
-	b.WriteString(ui.Title("Settings"))
-	b.WriteString("\n")
+	var inner strings.Builder
 
 	for i, f := range settingFields {
 		cursor := "  "
@@ -111,22 +109,22 @@ func (p *SettingsPage) View() string {
 		}
 
 		line := fmt.Sprintf("%s%-20s %s", cursor, f.label, val)
-		b.WriteString(line)
-		b.WriteString("\n")
+		inner.WriteString(line)
+		inner.WriteString("\n")
 	}
 
 	if p.editing {
-		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("  Edit %s:\n", settingFields[p.cursor].label))
-		b.WriteString("  " + p.input.View())
-		b.WriteString("\n")
+		inner.WriteString("\n")
+		inner.WriteString(fmt.Sprintf("  Edit %s:\n", settingFields[p.cursor].label))
+		inner.WriteString("  " + p.input.View())
+		inner.WriteString("\n")
 	}
 
 	if p.message != "" {
-		b.WriteString("\n  " + p.message)
+		inner.WriteString("\n  " + p.message)
 	}
 
-	return b.String()
+	return ui.Panel("Settings", inner.String(), p.width, 0, false)
 }
 
 func (p *SettingsPage) Name() string { return "Settings" }

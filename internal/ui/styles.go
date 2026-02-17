@@ -4,28 +4,27 @@ import "github.com/charmbracelet/lipgloss"
 
 var (
 	// Colors
-	Primary    = lipgloss.Color("63")  // Purple/blue
-	Secondary  = lipgloss.Color("86")  // Cyan
-	Accent     = lipgloss.Color("205") // Pink
+	Primary    = lipgloss.Color("38")  // Teal #00afd7
+	Secondary  = lipgloss.Color("117") // Sky blue
+	Accent     = lipgloss.Color("214") // Amber
 	Success    = lipgloss.Color("78")  // Green
 	Warning    = lipgloss.Color("214") // Orange
 	Error      = lipgloss.Color("196") // Red
-	Subtle     = lipgloss.Color("241") // Gray
-	Surface    = lipgloss.Color("236") // Dark gray
-	Background = lipgloss.Color("235") // Darker gray
+	Subtle     = lipgloss.Color("240") // Gray
+	Surface    = lipgloss.Color("235") // Dark gray
+	Background = lipgloss.Color("234") // Near-black
 	Text       = lipgloss.Color("252") // Light gray
 	TextDim    = lipgloss.Color("245") // Dimmer text
+
+	// BorderActive is the teal border color for focused panels (alias of Primary).
+	BorderActive = Primary
 
 	// Sidebar styles
 	SidebarStyle = lipgloss.NewStyle().
 			Width(20).
 			BorderStyle(lipgloss.RoundedBorder()).
-			BorderRight(true).
-			BorderTop(false).
-			BorderBottom(false).
-			BorderLeft(false).
-			BorderForeground(Surface).
-			Padding(1, 1)
+			BorderForeground(Subtle).
+			Padding(0, 1)
 
 	SidebarItemStyle = lipgloss.NewStyle().
 				Foreground(TextDim).
@@ -36,9 +35,9 @@ var (
 				Bold(true).
 				PaddingLeft(1)
 
-	// Content area
+	// Content area — borders are handled by Panel() in layout.
 	ContentStyle = lipgloss.NewStyle().
-			Padding(1, 2)
+			Padding(0, 0)
 
 	// Status bar
 	StatusBarStyle = lipgloss.NewStyle().

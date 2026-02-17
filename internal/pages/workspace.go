@@ -236,60 +236,48 @@ func (p *WorkspacePage) handleSetupResult(msg west.CommandResultMsg) tea.Cmd {
 }
 
 func (p *WorkspacePage) View() string {
-	var b strings.Builder
-	b.WriteString(ui.Title("Workspace"))
-	b.WriteString("\n")
-
 	ws := p.workspace
 	if ws == nil {
-		b.WriteString("  No workspace detected.\n")
-		return b.String()
+		return ui.DimStyle.Render("  No workspace detected.")
 	}
 
-	// Show setup progress during setup
-	if p.settingUp {
-		b.WriteString("  Setting up...\n\n")
-		b.WriteString(p.renderSetupChecklist())
-		b.WriteString("\n")
-		b.WriteString(p.viewport.View())
-		return b.String()
-	}
-
-	if p.setupFailed {
-		b.WriteString("  " + ui.ErrorBadge("Setup Failed") + "\n\n")
-		b.WriteString(p.renderSetupChecklist())
-		b.WriteString("\n")
-		b.WriteString(p.viewport.View())
-		return b.String()
-	}
-
-	// Determine overall status badge
+	// Build Environment section
+	var envB strings.Builder
 	statusBadge := p.getStatusBadge()
-	b.WriteString("  " + statusBadge + "\n\n")
-	b.WriteString(fmt.Sprintf("  Root:     %s\n", ws.Root))
-	b.WriteString(fmt.Sprintf("  Manifest: %s\n", ws.ManifestPath))
+	envB.WriteString("  " + statusBadge + "\n\n")
+	envB.WriteString(fmt.Sprintf("  Root:     %s\n", ws.Root))
+	envB.WriteString(fmt.Sprintf("  Manifest: %s\n", ws.ManifestPath))
+	if p.message != "" {
+		envB.WriteString("\n  " + p.message + "\n")
+	}
+	envPanel := ui.Panel("Environment", envB.String(), p.width, 0, false)
 
-	// Always show health checklist
-	b.WriteString("\n  Setup Status:\n")
-	b.WriteString(p.renderHealthChecklist())
-
-	// Show actionable guidance if setup is incomplete
-	if !p.isFullySetup() {
-		b.WriteString("\n  " + ui.ErrorBadge("Action Required") + "\n")
-		if !ws.Initialized {
-			b.WriteString("  Press 's' to run full setup wizard\n")
-		} else {
-			b.WriteString("  Press 's' to complete missing setup steps\n")
+	// Build Setup Status section
+	var statusB strings.Builder
+	if p.settingUp || p.setupFailed {
+		statusB.WriteString(p.renderSetupChecklist())
+	} else {
+		statusB.WriteString(p.renderHealthChecklist())
+		if !p.isFullySetup() {
+			statusB.WriteString("\n  " + ui.ErrorBadge("Action Required") + "\n")
+			if !ws.Initialized {
+				statusB.WriteString("  Press 's' to run full setup wizard\n")
+			} else {
+				statusB.WriteString("  Press 's' to complete missing setup steps\n")
+			}
 		}
 	}
+	statusPanel := ui.Panel("Setup Status", statusB.String(), p.width, 0, false)
 
-	if p.message != "" {
-		b.WriteString("\n  " + p.message + "\n")
-	}
+	var b strings.Builder
+	b.WriteString(envPanel)
+	b.WriteString("\n")
+	b.WriteString(statusPanel)
 
 	if p.output.Len() > 0 {
 		b.WriteString("\n")
-		b.WriteString(p.viewport.View())
+		outputPanel := ui.Panel("Output", p.viewport.View(), p.width, 0, false)
+		b.WriteString(outputPanel)
 	}
 
 	return b.String()

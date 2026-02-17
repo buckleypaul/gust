@@ -561,8 +561,6 @@ func (p *ProjectPage) focusCurrent() {
 
 func (p *ProjectPage) View() string {
 	var b strings.Builder
-	b.WriteString(ui.Title("Project"))
-	b.WriteString("\n")
 
 	if p.message != "" {
 		b.WriteString("  " + p.message + "\n\n")

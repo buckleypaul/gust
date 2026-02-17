@@ -140,18 +140,16 @@ func (p *MonitorPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 func (p *MonitorPage) View() string {
 	var b strings.Builder
-	b.WriteString(ui.Title("Monitor"))
-	b.WriteString("\n")
-
-	if p.message != "" {
-		b.WriteString("  " + p.message + "\n\n")
-	}
 
 	switch p.state {
 	case monitorStatePortSelect:
+		var connB strings.Builder
+		if p.message != "" {
+			connB.WriteString("  " + p.message + "\n\n")
+		}
 		if len(p.ports) == 0 {
-			b.WriteString(ui.DimStyle.Render("  No serial ports found. Press r to refresh."))
-			b.WriteString("\n")
+			connB.WriteString(ui.DimStyle.Render("  No serial ports found. Press r to refresh."))
+			connB.WriteString("\n")
 		} else {
 			for i, port := range p.ports {
 				cursor := "  "
@@ -162,20 +160,30 @@ func (p *MonitorPage) View() string {
 				if port.IsUSB {
 					desc += fmt.Sprintf(" (USB %s:%s)", port.VID, port.PID)
 				}
-				b.WriteString(cursor + desc + "\n")
+				connB.WriteString(cursor + desc + "\n")
 			}
-			b.WriteString(fmt.Sprintf("\n  Baud rate: %d\n", p.baudRate))
+			connB.WriteString(fmt.Sprintf("\n  Baud rate: %d\n", p.baudRate))
 		}
+		b.WriteString(ui.Panel("Connection", connB.String(), p.width, 0, false))
 
 	case monitorStateConnected:
-		b.WriteString(p.viewport.View())
-		b.WriteString("\n")
-		b.WriteString(p.input.View())
+		var connB strings.Builder
+		if p.message != "" {
+			connB.WriteString("  " + p.message + "\n")
+		}
 		scrollStatus := "ON"
 		if !p.autoScroll {
 			scrollStatus = "OFF"
 		}
-		b.WriteString(fmt.Sprintf("\n  Auto-scroll: %s", scrollStatus))
+		connB.WriteString(fmt.Sprintf("  Auto-scroll: %s\n", scrollStatus))
+		b.WriteString(ui.Panel("Connection", connB.String(), p.width, 0, false))
+		b.WriteString("\n")
+
+		var outB strings.Builder
+		outB.WriteString(p.viewport.View())
+		outB.WriteString("\n")
+		outB.WriteString(p.input.View())
+		b.WriteString(ui.Panel("Output", outB.String(), p.width, 0, false))
 	}
 
 	return b.String()
