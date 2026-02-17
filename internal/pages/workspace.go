@@ -37,6 +37,7 @@ var stepLabels = [stepCount]string{
 
 type WorkspacePage struct {
 	workspace     *west.Workspace
+	runner        west.Runner
 	health        west.WorkspaceHealth
 	updating      bool
 	output        strings.Builder
@@ -45,20 +46,27 @@ type WorkspacePage struct {
 	width, height int
 	message       string
 
-	settingUp   bool
-	currentStep setupStep
-	stepsDone   [stepCount]bool
-	setupFailed bool
+	settingUp       bool
+	currentStep     setupStep
+	stepsDone       [stepCount]bool
+	setupFailed     bool
+	requestSeq      int
+	activeRequestID string
 }
 
-func NewWorkspacePage(ws *west.Workspace) *WorkspacePage {
+func NewWorkspacePage(ws *west.Workspace, runners ...west.Runner) *WorkspacePage {
 	vp := viewport.New(0, 0)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = ui.AccentStyle
+	runner := west.RealRunner()
+	if len(runners) > 0 && runners[0] != nil {
+		runner = runners[0]
+	}
 
 	page := &WorkspacePage{
 		workspace: ws,
+		runner:    runner,
 		viewport:  vp,
 		spinner:   s,
 	}
@@ -93,10 +101,12 @@ func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		case "u":
 			if p.workspace != nil && p.workspace.Initialized {
 				p.updating = true
+				requestID := p.nextRequestID()
+				p.activeRequestID = requestID
 				p.output.Reset()
 				p.output.WriteString("Running west update...\n\n")
 				p.viewport.SetContent(p.output.String())
-				return p, west.Update()
+				return p, west.WithRequestID(requestID, p.runner.Update())
 			}
 		case "c":
 			p.output.Reset()
@@ -115,6 +125,9 @@ func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 	case west.CommandResultMsg:
 		if p.settingUp {
+			if msg.RequestID != p.activeRequestID {
+				return p, nil
+			}
 			return p, p.handleSetupResult(msg)
 		}
 
@@ -122,8 +135,12 @@ func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		if !p.updating {
 			return p, nil
 		}
+		if msg.RequestID != p.activeRequestID {
+			return p, nil
+		}
 
 		p.updating = false
+		p.activeRequestID = ""
 		p.output.WriteString(msg.Output)
 		if msg.ExitCode == 0 {
 			p.message = "Update completed successfully"
@@ -146,6 +163,7 @@ func (p *WorkspacePage) startSetup() tea.Cmd {
 	p.stepsDone = [stepCount]bool{}
 	p.output.Reset()
 	p.message = ""
+	p.activeRequestID = p.nextRequestID()
 
 	// Always start with brew deps check (step 0)
 	p.currentStep = stepBrewDeps
@@ -159,6 +177,12 @@ func (p *WorkspacePage) startSetup() tea.Cmd {
 }
 
 func (p *WorkspacePage) startStep() tea.Cmd {
+	requestID := p.activeRequestID
+	if requestID == "" {
+		requestID = p.nextRequestID()
+		p.activeRequestID = requestID
+	}
+
 	label := stepLabels[p.currentStep]
 	p.output.WriteString(fmt.Sprintf("=== %s ===\n", label))
 	p.output.WriteString("Running...\n\n")
@@ -167,17 +191,17 @@ func (p *WorkspacePage) startStep() tea.Cmd {
 
 	switch p.currentStep {
 	case stepBrewDeps:
-		return west.InstallBrewDeps()
+		return west.WithRequestID(requestID, p.runner.InstallBrewDeps())
 	case stepInit:
-		return west.Init()
+		return west.WithRequestID(requestID, p.runner.Init())
 	case stepUpdate:
-		return west.Update()
+		return west.WithRequestID(requestID, p.runner.Update())
 	case stepExport:
-		return west.ZephyrExport()
+		return west.WithRequestID(requestID, p.runner.ZephyrExport())
 	case stepPipInstall:
-		return west.PackagesPipInstall()
+		return west.WithRequestID(requestID, p.runner.PackagesPipInstall())
 	case stepSdkInstall:
-		return west.SdkInstall()
+		return west.WithRequestID(requestID, p.runner.SdkInstall())
 	}
 	return nil
 }
@@ -188,6 +212,7 @@ func (p *WorkspacePage) handleSetupResult(msg west.CommandResultMsg) tea.Cmd {
 	if msg.ExitCode != 0 {
 		p.setupFailed = true
 		p.settingUp = false
+		p.activeRequestID = ""
 		p.message = fmt.Sprintf("Setup failed at: %s (exit code: %d, %s)",
 			stepLabels[p.currentStep], msg.ExitCode, msg.Duration)
 		p.output.WriteString(fmt.Sprintf("\n%s\n", p.message))
@@ -217,6 +242,7 @@ func (p *WorkspacePage) handleSetupResult(msg west.CommandResultMsg) tea.Cmd {
 
 	if next >= stepCount {
 		p.settingUp = false
+		p.activeRequestID = ""
 		p.message = "Setup completed successfully!"
 		p.output.WriteString(p.message + "\n")
 		p.viewport.SetContent(p.output.String())
@@ -397,4 +423,9 @@ func (p *WorkspacePage) SetSize(w, h int) {
 	}
 	p.viewport.Width = w - 4
 	p.viewport.Height = vpHeight
+}
+
+func (p *WorkspacePage) nextRequestID() string {
+	p.requestSeq++
+	return fmt.Sprintf("workspace-%d", p.requestSeq)
 }

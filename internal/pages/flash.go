@@ -17,6 +17,7 @@ import (
 
 type FlashPage struct {
 	store           *store.Store
+	runner          west.Runner
 	lastBuild       *store.BuildRecord
 	selectedProject string
 	flashing        bool
@@ -24,12 +25,20 @@ type FlashPage struct {
 	viewport        viewport.Model
 	flashStart      time.Time
 	width, height   int
+	requestSeq      int
+	activeRequestID string
+	message         string
 }
 
-func NewFlashPage(s *store.Store) *FlashPage {
+func NewFlashPage(s *store.Store, runners ...west.Runner) *FlashPage {
 	vp := viewport.New(0, 0)
+	runner := west.RealRunner()
+	if len(runners) > 0 && runners[0] != nil {
+		runner = runners[0]
+	}
 	return &FlashPage{
 		store:    s,
+		runner:   runner,
 		viewport: vp,
 	}
 }
@@ -53,6 +62,8 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		case "f", "enter":
 			p.refreshLastBuild()
 			p.flashing = true
+			requestID := p.nextRequestID()
+			p.activeRequestID = requestID
 			p.output.Reset()
 			p.flashStart = time.Now()
 
@@ -62,10 +73,11 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			}
 			p.output.WriteString(fmt.Sprintf("Flashing %s...\n\n", board))
 			p.viewport.SetContent(p.output.String())
-			return p, west.RunStreaming("west", "flash")
+			return p, west.WithRequestID(requestID, p.runner.Run("west", "flash"))
 		case "c":
 			p.output.Reset()
 			p.viewport.SetContent("")
+			p.message = ""
 		}
 
 	case west.CommandResultMsg:
@@ -73,8 +85,12 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		if !p.flashing {
 			return p, nil
 		}
+		if msg.RequestID != p.activeRequestID {
+			return p, nil
+		}
 
 		p.flashing = false
+		p.activeRequestID = ""
 		p.output.WriteString(msg.Output)
 		success := msg.ExitCode == 0
 		status := "success"
@@ -91,12 +107,14 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			board = p.lastBuild.Board
 		}
 		if p.store != nil {
-			p.store.AddFlash(store.FlashRecord{
+			if err := p.store.AddFlash(store.FlashRecord{
 				Board:     board,
 				Timestamp: p.flashStart,
 				Success:   success,
 				Duration:  msg.Duration.String(),
-			})
+			}); err != nil {
+				p.message = fmt.Sprintf("Flash finished, but history save failed: %v", err)
+			}
 		}
 		return p, nil
 	}
@@ -125,6 +143,9 @@ func (p *FlashPage) View() string {
 		}
 	} else {
 		statusB.WriteString(ui.DimStyle.Render("  No recent builds found. Build first.") + "\n")
+	}
+	if p.message != "" {
+		statusB.WriteString("  " + p.message + "\n")
 	}
 	statusPanel := ui.Panel("Status", statusB.String(), p.width, 0, false)
 
@@ -169,4 +190,9 @@ func (p *FlashPage) refreshLastBuild() {
 		return
 	}
 	p.lastBuild = &builds[len(builds)-1]
+}
+
+func (p *FlashPage) nextRequestID() string {
+	p.requestSeq++
+	return fmt.Sprintf("flash-%d", p.requestSeq)
 }

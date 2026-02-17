@@ -27,20 +27,26 @@ type serialDataMsg struct {
 	Data string
 }
 
+type monitorConnectedMsg struct {
+	portName string
+	baudRate int
+	err      error
+}
+
 type MonitorPage struct {
-	state      monitorState
-	ports      []serialpkg.PortInfo
-	cursor     int
-	monitor    *serialpkg.Monitor
-	output     strings.Builder
-	viewport   viewport.Model
-	input      textinput.Model
-	autoScroll bool
-	store      *store.Store
-	baudRate   int
+	state         monitorState
+	ports         []serialpkg.PortInfo
+	cursor        int
+	monitor       *serialpkg.Monitor
+	output        strings.Builder
+	viewport      viewport.Model
+	input         textinput.Model
+	autoScroll    bool
+	store         *store.Store
+	baudRate      int
 	width, height int
-	message    string
-	program    *tea.Program
+	message       string
+	program       *tea.Program
 }
 
 func NewMonitorPage(s *store.Store, baudRate int) *MonitorPage {
@@ -75,6 +81,16 @@ func (p *MonitorPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			p.message = fmt.Sprintf("Error listing ports: %v", msg.err)
 		}
 		return p, nil
+
+	case monitorConnectedMsg:
+		if msg.err != nil {
+			p.message = fmt.Sprintf("Failed to connect: %v", msg.err)
+			return p, nil
+		}
+		p.state = monitorStateConnected
+		p.message = fmt.Sprintf("Connected to %s @ %d", msg.portName, msg.baudRate)
+		focusCmd := p.input.Focus()
+		return p, tea.Batch(focusCmd, p.waitForData)
 
 	case serialDataMsg:
 		p.output.WriteString(msg.Data)
@@ -121,7 +137,9 @@ func (p *MonitorPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			case "enter":
 				if p.input.Value() != "" {
 					data := p.input.Value() + "\r\n"
-					p.monitor.Write([]byte(data))
+					if err := p.monitor.Write([]byte(data)); err != nil {
+						p.message = fmt.Sprintf("Write failed: %v", err)
+					}
 					p.input.SetValue("")
 				}
 				return p, nil
@@ -234,13 +252,9 @@ func (p *MonitorPage) connect(portName string) tea.Cmd {
 	return func() tea.Msg {
 		err := p.monitor.Connect(portName, p.baudRate)
 		if err != nil {
-			return portsLoadedMsg{err: err}
+			return monitorConnectedMsg{err: err}
 		}
-		p.state = monitorStateConnected
-		p.message = fmt.Sprintf("Connected to %s @ %d", portName, p.baudRate)
-		p.input.Focus()
-		// Start reading data
-		return p.waitForDataMsg()
+		return monitorConnectedMsg{portName: portName, baudRate: p.baudRate}
 	}
 }
 

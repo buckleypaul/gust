@@ -1,6 +1,8 @@
 package store
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -63,5 +65,28 @@ func TestEmptyStore(t *testing.T) {
 	}
 	if len(builds) != 0 {
 		t.Errorf("expected 0 builds, got %d", len(builds))
+	}
+}
+
+func TestAddBuildFailsOnCorruptHistoryFile(t *testing.T) {
+	tmp := t.TempDir()
+	s := New(tmp)
+
+	historyDir := filepath.Join(tmp, "history")
+	if err := os.MkdirAll(historyDir, 0o755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(historyDir, "builds.json"), []byte("{not-json"), 0o644); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	err := s.AddBuild(BuildRecord{
+		Board:     "nrf52840dk_nrf52840",
+		Timestamp: time.Now(),
+		Success:   true,
+		Duration:  "1s",
+	})
+	if err == nil {
+		t.Fatal("expected AddBuild to fail with corrupt history file")
 	}
 }

@@ -231,7 +231,9 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 					value := strings.TrimSpace(parts[1])
 					p.kconfigEntries = append(p.kconfigEntries, kconfigEntry{Name: name, Value: value})
 					p.filterKconfig()
-					p.saveKconfig()
+					if err := p.saveKconfig(); err != nil {
+						p.message = fmt.Sprintf("Failed to save prj.conf: %v", err)
+					}
 				}
 			}
 			p.adding = false
@@ -264,7 +266,9 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 					}
 				}
 				p.filterKconfig()
-				p.saveKconfig()
+				if err := p.saveKconfig(); err != nil {
+					p.message = fmt.Sprintf("Failed to save prj.conf: %v", err)
+				}
 			}
 			p.editing = false
 			p.editInput.SetValue("")
@@ -343,7 +347,9 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 				p.filterBoards()
 				p.loadOverlay()
 				p.cfg.DefaultBoard = selected
-				config.Save(*p.cfg, p.wsRoot, false)
+				if err := config.Save(*p.cfg, p.wsRoot, false); err != nil {
+					p.message = fmt.Sprintf("Board selected, but config save failed: %v", err)
+				}
 				// Broadcast board selection
 				return p, func() tea.Msg {
 					return app.BoardSelectedMsg{Board: selected}
@@ -423,7 +429,9 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 				p.filterBoards()
 				p.loadOverlay()
 				p.cfg.DefaultBoard = selected
-				config.Save(*p.cfg, p.wsRoot, false)
+				if err := config.Save(*p.cfg, p.wsRoot, false); err != nil {
+					p.message = fmt.Sprintf("Board selected, but config save failed: %v", err)
+				}
 				return p, func() tea.Msg {
 					return app.BoardSelectedMsg{Board: selected}
 				}
@@ -440,7 +448,9 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		case "enter":
 			shield := p.shieldInput.Value()
 			p.cfg.LastShield = shield
-			config.Save(*p.cfg, p.wsRoot, false)
+			if err := config.Save(*p.cfg, p.wsRoot, false); err != nil {
+				p.message = fmt.Sprintf("Shield selected, but config save failed: %v", err)
+			}
 			return p, func() tea.Msg {
 				return app.ShieldSelectedMsg{Shield: shield}
 			}
@@ -492,7 +502,9 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 					}
 				}
 				p.filterKconfig()
-				p.saveKconfig()
+				if err := p.saveKconfig(); err != nil {
+					p.message = fmt.Sprintf("Failed to save prj.conf: %v", err)
+				}
 			}
 			return p, nil
 		}
@@ -509,7 +521,9 @@ func (p *ProjectPage) selectProject(path string) tea.Cmd {
 	p.projectListOpen = false
 	p.filterProjects()
 	p.cfg.LastProject = path
-	config.Save(*p.cfg, p.wsRoot, false)
+	if err := config.Save(*p.cfg, p.wsRoot, false); err != nil {
+		p.message = fmt.Sprintf("Project selected, but config save failed: %v", err)
+	}
 	p.kconfigLoaded = false
 	return tea.Batch(
 		p.loadKconfig,
@@ -850,10 +864,11 @@ func (p *ProjectPage) SetSize(w, h int) {
 
 // loadKconfig reads prj.conf from the current project path.
 func (p *ProjectPage) loadKconfig() tea.Msg {
-	if p.projectPath == "" {
+	projectRoot := p.projectAbsPath()
+	if projectRoot == "" {
 		return kconfigLoadedMsg{entries: nil, err: nil}
 	}
-	confPath := filepath.Join(p.projectPath, "prj.conf")
+	confPath := filepath.Join(projectRoot, "prj.conf")
 	entries, err := parsePrjConf(confPath)
 	return kconfigLoadedMsg{entries: entries, err: err}
 }
@@ -861,17 +876,18 @@ func (p *ProjectPage) loadKconfig() tea.Msg {
 // loadOverlay reads the board-specific overlay files synchronously.
 func (p *ProjectPage) loadOverlay() {
 	board := p.boardInput.Value()
-	if board == "" || p.projectPath == "" {
+	projectRoot := p.projectAbsPath()
+	if board == "" || projectRoot == "" {
 		p.overlayEntries = nil
 		p.overlayExists = false
 		return
 	}
 	boardFile := strings.SplitN(board, "/", 2)[0]
-	confPath := filepath.Join(p.projectPath, "boards", boardFile+".conf")
+	confPath := filepath.Join(projectRoot, "boards", boardFile+".conf")
 	entries, _ := parsePrjConf(confPath)
 	p.overlayEntries = entries
 
-	overlayPath := filepath.Join(p.projectPath, "boards", boardFile+".overlay")
+	overlayPath := filepath.Join(projectRoot, "boards", boardFile+".overlay")
 	_, err := os.Stat(overlayPath)
 	p.overlayExists = err == nil
 }
@@ -941,11 +957,12 @@ func (p *ProjectPage) filterKconfig() {
 }
 
 // saveKconfig writes kconfigEntries back to prj.conf.
-func (p *ProjectPage) saveKconfig() {
-	if p.projectPath == "" {
-		return
+func (p *ProjectPage) saveKconfig() error {
+	projectRoot := p.projectAbsPath()
+	if projectRoot == "" {
+		return nil
 	}
-	confPath := filepath.Join(p.projectPath, "prj.conf")
+	confPath := filepath.Join(projectRoot, "prj.conf")
 	var lines []string
 	for _, e := range p.kconfigEntries {
 		line := e.Name + "=" + e.Value
@@ -955,7 +972,53 @@ func (p *ProjectPage) saveKconfig() {
 		lines = append(lines, line)
 	}
 	content := strings.Join(lines, "\n") + "\n"
-	os.WriteFile(confPath, []byte(content), 0o644)
+	return writeFileAtomic(confPath, []byte(content), 0o644)
+}
+
+func (p *ProjectPage) projectAbsPath() string {
+	if p.projectPath == "" {
+		return ""
+	}
+	if filepath.IsAbs(p.projectPath) {
+		return p.projectPath
+	}
+	return filepath.Join(p.wsRoot, p.projectPath)
+}
+
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".gust-tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	success := false
+	defer func() {
+		if !success {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	success = true
+	return nil
 }
 
 // max returns the larger of two ints.

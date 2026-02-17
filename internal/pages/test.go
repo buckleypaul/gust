@@ -16,19 +16,27 @@ import (
 )
 
 type TestPage struct {
-	store      *store.Store
-	running    bool
-	output     strings.Builder
-	viewport   viewport.Model
-	testStart  time.Time
-	width, height int
-	message    string
+	store           *store.Store
+	runner          west.Runner
+	running         bool
+	output          strings.Builder
+	viewport        viewport.Model
+	testStart       time.Time
+	width, height   int
+	message         string
+	requestSeq      int
+	activeRequestID string
 }
 
-func NewTestPage(s *store.Store) *TestPage {
+func NewTestPage(s *store.Store, runners ...west.Runner) *TestPage {
 	vp := viewport.New(0, 0)
+	runner := west.RealRunner()
+	if len(runners) > 0 && runners[0] != nil {
+		runner = runners[0]
+	}
 	return &TestPage{
 		store:    s,
+		runner:   runner,
 		viewport: vp,
 	}
 }
@@ -47,11 +55,13 @@ func (p *TestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		switch msg.String() {
 		case "t", "enter":
 			p.running = true
+			requestID := p.nextRequestID()
+			p.activeRequestID = requestID
 			p.output.Reset()
 			p.testStart = time.Now()
 			p.output.WriteString("Running tests...\n\n")
 			p.viewport.SetContent(p.output.String())
-			return p, west.RunStreaming("west", "build", "-t", "run")
+			return p, west.WithRequestID(requestID, p.runner.Run("west", "build", "-t", "run"))
 		case "c":
 			p.output.Reset()
 			p.viewport.SetContent("")
@@ -63,8 +73,12 @@ func (p *TestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		if !p.running {
 			return p, nil
 		}
+		if msg.RequestID != p.activeRequestID {
+			return p, nil
+		}
 
 		p.running = false
+		p.activeRequestID = ""
 		p.output.WriteString(msg.Output)
 		success := msg.ExitCode == 0
 		if success {
@@ -78,11 +92,13 @@ func (p *TestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 		// Record test result
 		if p.store != nil {
-			p.store.AddTest(store.TestRecord{
+			if err := p.store.AddTest(store.TestRecord{
 				Timestamp: p.testStart,
 				Success:   success,
 				Duration:  msg.Duration.String(),
-			})
+			}); err != nil {
+				p.message = fmt.Sprintf("Tests completed, but history save failed: %v", err)
+			}
 		}
 		return p, nil
 	}
@@ -132,4 +148,9 @@ func (p *TestPage) SetSize(w, h int) {
 	}
 	p.viewport.Width = w - 4
 	p.viewport.Height = vpHeight
+}
+
+func (p *TestPage) nextRequestID() string {
+	p.requestSeq++
+	return fmt.Sprintf("test-%d", p.requestSeq)
 }

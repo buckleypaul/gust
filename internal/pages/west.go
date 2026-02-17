@@ -20,22 +20,30 @@ type westCommand struct {
 }
 
 type WestPage struct {
-	commands   []westCommand
-	cursor     int
-	running    bool
-	output     strings.Builder
-	viewport   viewport.Model
-	width, height int
+	runner          west.Runner
+	commands        []westCommand
+	cursor          int
+	running         bool
+	output          strings.Builder
+	viewport        viewport.Model
+	width, height   int
+	requestSeq      int
+	activeRequestID string
 }
 
-func NewWestPage() *WestPage {
+func NewWestPage(runners ...west.Runner) *WestPage {
 	vp := viewport.New(0, 0)
+	runner := west.RealRunner()
+	if len(runners) > 0 && runners[0] != nil {
+		runner = runners[0]
+	}
 	return &WestPage{
+		runner: runner,
 		commands: []westCommand{
-			{"status", "Show workspace status", west.Status},
-			{"list", "List workspace projects", west.List},
-			{"diff", "Show workspace diffs", west.Diff},
-			{"update", "Update workspace", west.Update},
+			{"status", "Show workspace status", runner.Status},
+			{"list", "List workspace projects", runner.List},
+			{"diff", "Show workspace diffs", runner.Diff},
+			{"update", "Update workspace", runner.Update},
 		},
 		viewport: vp,
 	}
@@ -64,22 +72,31 @@ func (p *WestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			}
 		case "enter":
 			p.running = true
+			requestID := p.nextRequestID()
+			p.activeRequestID = requestID
 			p.output.Reset()
 			p.output.WriteString(fmt.Sprintf("Running west %s...\n\n", p.commands[p.cursor].name))
 			p.viewport.SetContent(p.output.String())
-			return p, p.commands[p.cursor].cmd()
+			return p, west.WithRequestID(requestID, p.commands[p.cursor].cmd())
 		case "c":
 			p.output.Reset()
 			p.viewport.SetContent("")
 		}
 
 	case west.CommandOutputMsg:
+		if !p.running {
+			return p, nil
+		}
 		p.output.WriteString(msg.Line + "\n")
 		p.viewport.SetContent(p.output.String())
 		p.viewport.GotoBottom()
 
 	case west.CommandCompletedMsg:
+		if !p.running {
+			return p, nil
+		}
 		p.running = false
+		p.activeRequestID = ""
 		if msg.Err != nil {
 			p.output.WriteString(fmt.Sprintf("\nError: %v\n", msg.Err))
 		}
@@ -93,8 +110,12 @@ func (p *WestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		if !p.running {
 			return p, nil
 		}
+		if msg.RequestID != p.activeRequestID {
+			return p, nil
+		}
 
 		p.running = false
+		p.activeRequestID = ""
 		p.output.WriteString(msg.Output)
 		status := "success"
 		if msg.ExitCode != 0 {
@@ -153,3 +174,7 @@ func (p *WestPage) SetSize(w, h int) {
 	p.viewport.Height = vpHeight
 }
 
+func (p *WestPage) nextRequestID() string {
+	p.requestSeq++
+	return fmt.Sprintf("west-%d", p.requestSeq)
+}

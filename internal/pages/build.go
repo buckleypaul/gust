@@ -62,7 +62,7 @@ type BuildPage struct {
 	store  *store.Store
 	cfg    *config.Config
 	wsRoot string
-	cwd    string
+	runner west.Runner
 
 	// Metadata
 	selectedProject string
@@ -71,15 +71,21 @@ type BuildPage struct {
 	buildStart      time.Time
 	width, height   int
 	message         string
+	requestSeq      int
+	activeRequestID string
 }
 
-func NewBuildPage(s *store.Store, cfg *config.Config, wsRoot string, cwd string) *BuildPage {
+func NewBuildPage(s *store.Store, cfg *config.Config, wsRoot string, runners ...west.Runner) *BuildPage {
 	cmake := textinput.New()
 	cmake.Placeholder = "e.g. -DOVERLAY_CONFIG=overlay.conf"
 	cmake.CharLimit = 512
 	cmake.Prompt = ""
 
 	vp := viewport.New(0, 0)
+	runner := west.RealRunner()
+	if len(runners) > 0 && runners[0] != nil {
+		runner = runners[0]
+	}
 
 	return &BuildPage{
 		cmakeInput:      cmake,
@@ -87,7 +93,7 @@ func NewBuildPage(s *store.Store, cfg *config.Config, wsRoot string, cwd string)
 		store:           s,
 		cfg:             cfg,
 		wsRoot:          wsRoot,
-		cwd:             cwd,
+		runner:          runner,
 		focusedField:    fieldPristine,
 		selectedProject: cfg.LastProject,
 		selectedBoard:   cfg.DefaultBoard,
@@ -118,8 +124,12 @@ func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		if p.state != buildStateRunning {
 			return p, nil
 		}
+		if msg.RequestID != p.activeRequestID {
+			return p, nil
+		}
 
 		p.state = buildStateDone
+		p.activeRequestID = ""
 		p.output.WriteString(msg.Output)
 		success := msg.ExitCode == 0
 		status := "success"
@@ -132,7 +142,7 @@ func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 		// Record build
 		if p.store != nil {
-			p.store.AddBuild(store.BuildRecord{
+			if err := p.store.AddBuild(store.BuildRecord{
 				Board:     p.selectedBoard,
 				App:       p.projectValue(),
 				Timestamp: p.buildStart,
@@ -141,13 +151,17 @@ func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 				Shield:    p.selectedShield,
 				Pristine:  p.pristine,
 				CMakeArgs: p.cmakeInput.Value(),
-			})
+			}); err != nil {
+				p.message = fmt.Sprintf("Build recorded, but history save failed: %v", err)
+			}
 		}
 
 		// Persist board to config on success
 		if success {
 			p.cfg.DefaultBoard = p.selectedBoard
-			config.Save(*p.cfg, p.wsRoot, false)
+			if err := config.Save(*p.cfg, p.wsRoot, false); err != nil {
+				p.message = fmt.Sprintf("Build succeeded, but config save failed: %v", err)
+			}
 		}
 		return p, nil
 
@@ -257,7 +271,7 @@ func (p *BuildPage) focusCurrent() {
 
 func (p *BuildPage) View() string {
 	// Split vertically: form on top, output below
-	formHeight := 10 // Fixed height for form
+	formHeight := 10                          // Fixed height for form
 	outputHeight := p.height - formHeight - 1 // -1 for separator
 
 	if outputHeight < 5 {
@@ -376,7 +390,7 @@ func (p *BuildPage) Name() string { return "Build" }
 func (p *BuildPage) ShortHelp() []key.Binding {
 	if p.state == buildStateRunning {
 		return []key.Binding{
-			key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "cancel")),
+			key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit")),
 		}
 	}
 	bindings := []key.Binding{
@@ -435,14 +449,16 @@ func (p *BuildPage) startBuild() tea.Cmd {
 	}
 
 	p.state = buildStateRunning
+	requestID := p.nextRequestID()
+	p.activeRequestID = requestID
 	p.output.Reset()
 	p.buildStart = time.Now()
 	p.message = ""
 
 	project := p.projectValue()
-	// Resolve relative project paths against the original CWD, not the workspace root
+	// Resolve relative project paths against the workspace root.
 	if !filepath.IsAbs(project) {
-		project = filepath.Join(p.cwd, project)
+		project = filepath.Join(p.wsRoot, project)
 	}
 
 	args := []string{"build", "-b", board}
@@ -465,7 +481,7 @@ func (p *BuildPage) startBuild() tea.Cmd {
 	p.output.WriteString(label + "...\n\n")
 	p.updateViewportContent()
 
-	return west.RunStreaming("west", args...)
+	return west.WithRequestID(requestID, p.runner.Run("west", args...))
 }
 
 func (p *BuildPage) copyToClipboard() {
@@ -510,4 +526,9 @@ func (p *BuildPage) copyToClipboard() {
 	}
 
 	p.message = "Build output copied to clipboard"
+}
+
+func (p *BuildPage) nextRequestID() string {
+	p.requestSeq++
+	return fmt.Sprintf("build-%d", p.requestSeq)
 }

@@ -74,7 +74,7 @@ func Save(cfg Config, workspaceRoot string, global bool) error {
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(dir, "config.json"), data, 0o644)
+	return writeFileAtomic(filepath.Join(dir, "config.json"), data, 0o644)
 }
 
 func mergeFromFile(cfg *Config, path string) {
@@ -112,4 +112,40 @@ func mergeFromFile(cfg *Config, path string) {
 	if fileCfg.LastShield != "" {
 		cfg.LastShield = fileCfg.LastShield
 	}
+}
+
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".gust-tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	success := false
+	defer func() {
+		if !success {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	success = true
+	return nil
 }

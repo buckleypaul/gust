@@ -32,15 +32,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Warning: west auto-setup failed: %v\n", err)
 	}
 	st := store.New(filepath.Join(ws.Root, ".gust"))
+	runner := west.RealRunner()
 
 	pageMap := map[app.PageID]app.Page{
-		app.WorkspacePage: pages.NewWorkspacePage(ws),
-		app.BuildPage:     pages.NewBuildPage(st, &cfg, ws.Root, cwd),
-		app.FlashPage:     pages.NewFlashPage(st),
+		app.WorkspacePage: pages.NewWorkspacePage(ws, runner),
+		app.BuildPage:     pages.NewBuildPage(st, &cfg, ws.Root, runner),
+		app.FlashPage:     pages.NewFlashPage(st, runner),
 		app.MonitorPage:   pages.NewMonitorPage(st, cfg.SerialBaudRate),
-		app.TestPage:      pages.NewTestPage(st),
+		app.TestPage:      pages.NewTestPage(st, runner),
 		app.ArtifactsPage: pages.NewArtifactsPage(st),
-		app.WestPage:      pages.NewWestPage(),
+		app.WestPage:      pages.NewWestPage(runner),
 		app.ProjectPage:   pages.NewProjectPage(&cfg, ws.Root, ws.ManifestPath),
 		app.SettingsPage:  pages.NewSettingsPage(&cfg, ws.Root),
 	}
