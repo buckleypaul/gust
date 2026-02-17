@@ -89,6 +89,11 @@ func (p *WestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 	// Handle the bundled result from RunStreaming
 	case west.CommandResultMsg:
+		// Only handle command results if we're actually running a west command
+		if !p.running {
+			return p, nil
+		}
+
 		p.running = false
 		p.output.WriteString(msg.Output)
 		status := "success"

@@ -51,6 +51,7 @@ func PackagesPipInstall() tea.Cmd {
 
 // SdkInstall runs `west sdk install` to download and install the Zephyr SDK.
 // It first checks if wget is available, as the SDK setup script requires it.
+// Installs only the ARM toolchain by default (covers most embedded targets like nRF, STM32, etc.)
 func SdkInstall() tea.Cmd {
 	return func() tea.Msg {
 		// Pre-flight check: verify wget is installed
@@ -68,8 +69,9 @@ Then re-run the setup wizard.
 			}
 		}
 
-		// wget is available, proceed with SDK installation
-		return RunStreaming("west", "sdk", "install")()
+		// Install SDK with ARM toolchain only (most common embedded targets)
+		// User can install additional toolchains later with: west sdk install -t <toolchain>
+		return RunStreaming("west", "sdk", "install", "-t", "arm-zephyr-eabi")()
 	}
 }
 

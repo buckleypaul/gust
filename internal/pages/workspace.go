@@ -118,6 +118,11 @@ func (p *WorkspacePage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			return p, p.handleSetupResult(msg)
 		}
 
+		// Only handle command results if we're actually running an update
+		if !p.updating {
+			return p, nil
+		}
+
 		p.updating = false
 		p.output.WriteString(msg.Output)
 		if msg.ExitCode == 0 {
@@ -199,7 +204,17 @@ func (p *WorkspacePage) handleSetupResult(msg west.CommandResultMsg) tea.Cmd {
 	p.output.WriteString(fmt.Sprintf("  Completed in %s\n\n", msg.Duration))
 	p.stepsDone[p.currentStep] = true
 
+	// Find next step that isn't already done
 	next := p.currentStep + 1
+	for next < stepCount && p.stepsDone[next] {
+		// Skip steps already marked as done
+		p.output.WriteString(fmt.Sprintf("=== %s ===\n", stepLabels[next]))
+		p.output.WriteString("  Skipped (already done)\n\n")
+		p.viewport.SetContent(p.output.String())
+		p.viewport.GotoBottom()
+		next++
+	}
+
 	if next >= stepCount {
 		p.settingUp = false
 		p.message = "Setup completed successfully!"
@@ -382,9 +397,15 @@ func (p *WorkspacePage) ShortHelp() []key.Binding {
 func (p *WorkspacePage) SetSize(w, h int) {
 	p.width = w
 	p.height = h
-	vpHeight := h - 10
-	if vpHeight < 3 {
-		vpHeight = 3
+	// Reserve space for header content above viewport:
+	// - Title, status badge, root/manifest info
+	// - Health checklist (6 items + label)
+	// - Action required message
+	// - Completion message
+	// Total: ~25 lines
+	vpHeight := h - 25
+	if vpHeight < 10 {
+		vpHeight = 10
 	}
 	p.viewport.Width = w - 4
 	p.viewport.Height = vpHeight

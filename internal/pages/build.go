@@ -148,6 +148,11 @@ func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		return p, nil
 
 	case west.CommandResultMsg:
+		// Only handle command results if we're actually running a build
+		if p.state != buildStateRunning {
+			return p, nil
+		}
+
 		p.state = buildStateDone
 		p.output.WriteString(msg.Output)
 		success := msg.ExitCode == 0

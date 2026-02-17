@@ -152,43 +152,48 @@ func (w *Workspace) CheckHealth() WorkspaceHealth {
 	return health
 }
 
-// checkSdkInstalled checks if the Zephyr SDK is available.
+// checkSdkInstalled checks if the Zephyr SDK is available and properly set up.
 // It checks:
 // 1. ZEPHYR_SDK_INSTALL_DIR environment variable
 // 2. Common installation locations
+// 3. CMake package registry (created by setup.sh) and verifies SDK actually exists
 func checkSdkInstalled() bool {
-	// Check environment variable first
-	if sdkDir := os.Getenv("ZEPHYR_SDK_INSTALL_DIR"); sdkDir != "" {
-		if info, err := os.Stat(sdkDir); err == nil && info.IsDir() {
-			return true
-		}
-	}
-
-	// Check common installation locations
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return false
 	}
 
-	locations := []string{
-		filepath.Join(homeDir, "zephyr-sdk"),
-		filepath.Join("/opt", "zephyr-sdk"),
-	}
-
-	// Also check for versioned installations (e.g., ~/zephyr-sdk-0.17.4)
-	if entries, err := os.ReadDir(homeDir); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() && strings.HasPrefix(entry.Name(), "zephyr-sdk-") {
-				locations = append(locations, filepath.Join(homeDir, entry.Name()))
+	// Check if SDK is registered with CMake (created by setup.sh)
+	cmakeRegistry := filepath.Join(homeDir, ".cmake", "packages", "Zephyr-sdk")
+	if info, err := os.Stat(cmakeRegistry); err == nil && info.IsDir() {
+		// Read registry entries to find SDK path
+		if entries, err := os.ReadDir(cmakeRegistry); err == nil && len(entries) > 0 {
+			// Read the first registry file to get the SDK path
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					registryFile := filepath.Join(cmakeRegistry, entry.Name())
+					if content, err := os.ReadFile(registryFile); err == nil {
+						sdkPath := strings.TrimSpace(string(content))
+						// Verify the SDK directory actually exists
+						if info, err := os.Stat(sdkPath); err == nil && info.IsDir() {
+							// Double-check it has the sdk_version file
+							versionFile := filepath.Join(sdkPath, "sdk_version")
+							if _, err := os.Stat(versionFile); err == nil {
+								return true
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 
-	for _, loc := range locations {
-		if info, err := os.Stat(loc); err == nil && info.IsDir() {
-			// Verify it's a real SDK by checking for cmake/ subdirectory
-			cmakeDir := filepath.Join(loc, "cmake")
-			if cmakeInfo, err := os.Stat(cmakeDir); err == nil && cmakeInfo.IsDir() {
+	// Fallback: check environment variable
+	if sdkDir := os.Getenv("ZEPHYR_SDK_INSTALL_DIR"); sdkDir != "" {
+		if info, err := os.Stat(sdkDir); err == nil && info.IsDir() {
+			// Verify setup.sh ran by checking for sdk_version file
+			versionFile := filepath.Join(sdkDir, "sdk_version")
+			if _, err := os.Stat(versionFile); err == nil {
 				return true
 			}
 		}

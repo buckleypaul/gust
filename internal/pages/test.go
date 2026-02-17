@@ -59,6 +59,11 @@ func (p *TestPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		}
 
 	case west.CommandResultMsg:
+		// Only handle command results if we're actually running tests
+		if !p.running {
+			return p, nil
+		}
+
 		p.running = false
 		p.output.WriteString(msg.Output)
 		success := msg.ExitCode == 0

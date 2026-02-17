@@ -64,6 +64,11 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		}
 
 	case west.CommandResultMsg:
+		// Only handle command results if we're actually flashing
+		if !p.flashing {
+			return p, nil
+		}
+
 		p.flashing = false
 		p.output.WriteString(msg.Output)
 		success := msg.ExitCode == 0
