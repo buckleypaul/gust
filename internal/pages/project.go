@@ -287,6 +287,8 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 				p.boardListOpen = false
 				p.filterBoards()
 				p.loadOverlay()
+				p.cfg.DefaultBoard = selected
+				config.Save(*p.cfg, p.wsRoot, false)
 				// Broadcast board selection
 				return p, func() tea.Msg {
 					return app.BoardSelectedMsg{Board: selected}
@@ -342,6 +344,8 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 				p.boardInput.SetValue(selected)
 				p.filterBoards()
 				p.loadOverlay()
+				p.cfg.DefaultBoard = selected
+				config.Save(*p.cfg, p.wsRoot, false)
 				return p, func() tea.Msg {
 					return app.BoardSelectedMsg{Board: selected}
 				}
