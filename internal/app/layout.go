@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -11,17 +12,21 @@ import (
 
 const sidebarWidth = 22 // 20 content + 2 border/padding
 
-func renderProjectBar(selectedProject string, width int, sidebarFocused bool) string {
-	projectDisplay := "(none)"
-	if selectedProject != "" {
-		projectDisplay = selectedProject
+func renderProjectBar(selectedProject, selectedBoard string, width int, sidebarFocused bool) string {
+	projectDisplay := selectedProject
+	if projectDisplay == "" {
+		projectDisplay = "(none)"
 	}
-	left := ui.DimStyle.Render("Project: ") + projectDisplay
+	boardDisplay := selectedBoard
+	if boardDisplay == "" {
+		boardDisplay = "(none)"
+	}
+	content := fmt.Sprintf("Project: %s  Board: %s", projectDisplay, boardDisplay)
 	hint := ""
 	if sidebarFocused {
 		hint = ui.DimStyle.Render("  [p] change")
 	}
-	return ui.StatusBarStyle.Width(width).Render(left + hint)
+	return ui.StatusBarStyle.Width(width).Render(content + hint)
 }
 
 func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, height int, focused bool) string {
