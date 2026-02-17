@@ -6,16 +6,16 @@ A multi-paned TUI for Zephyr RTOS development with west, built with Go and Charm
 
 ```bash
 # Build
-go build ./cmd/gust
+make build
 
 # Run tests
-go test ./...
+make test
 
 # Run locally (requires Zephyr workspace)
 cd ~/zephyr-workspace && ./gust
 
 # Release (requires goreleaser)
-goreleaser release --snapshot --clean
+make release
 ```
 
 ## Architecture
@@ -36,9 +36,11 @@ internal/
 ## Key Files
 
 - `internal/app/model.go` - Root app model, focus system (sidebar ↔ content)
+- `internal/app/page.go` - Page interface definition
 - `internal/pages/*.go` - Each page implements `Page` interface
 - `internal/west/workspace.go` - Workspace detection (walks up for `.west/`)
 - `.goreleaser.yml` - Release config (Darwin/Linux, amd64/arm64)
+- `Makefile` - Build, test, install, release targets (handles CGO)
 
 ## Development Gotchas
 
@@ -55,7 +57,7 @@ This is why goreleaser sets `CGO_ENABLED=1` in builds.
 - For development without Zephyr: most features will error gracefully
 
 ### Focus System
-Recent addition (Feb 2025): Tab toggles between sidebar and content panes.
+Tab toggles between sidebar and content panes.
 - Sidebar shows `[FOCUSED]` label when active
 - Number keys (1-9) always jump to pages
 - Page-specific keys only work when content is focused
@@ -74,6 +76,7 @@ go test ./internal/store
 
 **Test coverage:**
 - `internal/west/workspace_test.go` - Workspace detection logic
+- `internal/west/env_test.go` - West environment/SDK detection
 - `internal/config/config_test.go` - Config merge behavior
 - `internal/store/store_test.go` - History persistence
 
