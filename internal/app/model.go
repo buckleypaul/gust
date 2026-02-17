@@ -25,6 +25,8 @@ type Model struct {
 	height          int
 	showHelp        bool
 	selectedProject string
+	selectedBoard   string
+	selectedShield  string
 	picker          *Picker
 	cfg             *config.Config
 	wsRoot          string
@@ -38,6 +40,8 @@ func New(pages map[PageID]Page, cfg *config.Config, wsRoot string, manifestPath 
 		wsRoot:          wsRoot,
 		manifestPath:    manifestPath,
 		selectedProject: cfg.LastProject,
+		selectedBoard:   cfg.DefaultBoard,
+		selectedShield:  cfg.LastShield,
 	}
 }
 
@@ -90,6 +94,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PickerClosedMsg:
 		m.picker = nil
 		return m, nil
+
+	case BoardSelectedMsg:
+		m.selectedBoard = msg.Board
+		// Broadcast to all pages
+		var cmds []tea.Cmd
+		for id, page := range m.pages {
+			newPage, cmd := page.Update(msg)
+			m.pages[id] = newPage
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
+
+	case ShieldSelectedMsg:
+		m.selectedShield = msg.Shield
+		// Broadcast to all pages
+		var cmds []tea.Cmd
+		for id, page := range m.pages {
+			newPage, cmd := page.Update(msg)
+			m.pages[id] = newPage
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
 
 	case tea.KeyMsg:
 		// When picker is open, forward all keys to picker
@@ -194,7 +224,7 @@ func (m Model) View() string {
 
 	page := m.pages[m.activePage]
 
-	projectBar := renderProjectBar(m.selectedProject, m.width, m.focus == FocusSidebar)
+	projectBar := renderProjectBar(m.selectedProject, m.selectedBoard, m.width, m.focus == FocusSidebar)
 	sidebar := renderSidebar(PageOrder, m.activePage, m.pages, contentHeight, m.focus == FocusSidebar)
 	content := ui.ContentStyle.
 		Width(contentWidth).
