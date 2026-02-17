@@ -173,7 +173,9 @@ func checkSdkInstalled() bool {
 				if !entry.IsDir() {
 					registryFile := filepath.Join(cmakeRegistry, entry.Name())
 					if content, err := os.ReadFile(registryFile); err == nil {
-						sdkPath := strings.TrimSpace(string(content))
+						// Registry points to the cmake subdir (e.g. .../zephyr-sdk-0.17.4/cmake)
+						// Go up one level to get the actual SDK root
+						sdkPath := filepath.Dir(strings.TrimSpace(string(content)))
 						// Verify the SDK directory actually exists
 						if info, err := os.Stat(sdkPath); err == nil && info.IsDir() {
 							// Double-check it has the sdk_version file
