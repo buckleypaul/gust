@@ -27,10 +27,7 @@ import (
 type formField int
 
 const (
-	fieldProject formField = iota
-	fieldBoard
-	fieldShield
-	fieldPristine
+	fieldPristine formField = iota
 	fieldCMakeArgs
 	fieldCount
 )
@@ -52,17 +49,8 @@ const (
 
 type BuildPage struct {
 	// Form inputs
-	projectInput textinput.Model
-	boardInput   textinput.Model
-	shieldInput  textinput.Model
-	cmakeInput   textinput.Model
-	pristine     bool
-
-	// Board type-ahead
-	boards         []west.Board
-	filteredBoards []west.Board
-	boardCursor    int
-	boardListOpen  bool
+	cmakeInput textinput.Model
+	pristine   bool
 
 	// State
 	focusedField formField
@@ -77,35 +65,15 @@ type BuildPage struct {
 	cwd    string
 
 	// Metadata
-	selectedBoard string
-	buildStart    time.Time
-	width, height int
-	message       string
-	loading       bool
+	selectedProject string
+	selectedBoard   string
+	selectedShield  string
+	buildStart      time.Time
+	width, height   int
+	message         string
 }
 
 func NewBuildPage(s *store.Store, cfg *config.Config, wsRoot string, cwd string) *BuildPage {
-	project := textinput.New()
-	project.Placeholder = "."
-	project.CharLimit = 256
-	project.Prompt = ""
-	if cfg.LastProject != "" {
-		project.SetValue(cfg.LastProject)
-	}
-
-	board := textinput.New()
-	board.Placeholder = "type to search..."
-	board.CharLimit = 128
-	board.Prompt = ""
-	if cfg.DefaultBoard != "" {
-		board.SetValue(cfg.DefaultBoard)
-	}
-
-	shield := textinput.New()
-	shield.Placeholder = "e.g. nrf7002ek"
-	shield.CharLimit = 128
-	shield.Prompt = ""
-
 	cmake := textinput.New()
 	cmake.Placeholder = "e.g. -DOVERLAY_CONFIG=overlay.conf"
 	cmake.CharLimit = 512
@@ -113,42 +81,36 @@ func NewBuildPage(s *store.Store, cfg *config.Config, wsRoot string, cwd string)
 
 	vp := viewport.New(0, 0)
 
-	// Focus first field
-	project.Focus()
-
 	return &BuildPage{
-		projectInput: project,
-		boardInput:   board,
-		shieldInput:  shield,
-		cmakeInput:   cmake,
-		viewport:     vp,
-		store:        s,
-		cfg:          cfg,
-		wsRoot:       wsRoot,
-		cwd:          cwd,
-		focusedField: fieldProject,
+		cmakeInput:      cmake,
+		viewport:        vp,
+		store:           s,
+		cfg:             cfg,
+		wsRoot:          wsRoot,
+		cwd:             cwd,
+		focusedField:    fieldPristine,
+		selectedProject: cfg.LastProject,
+		selectedBoard:   cfg.DefaultBoard,
+		selectedShield:  cfg.LastShield,
 	}
 }
 
 func (p *BuildPage) Init() tea.Cmd {
-	p.loading = true
-	return west.ListBoards()
+	return nil
 }
 
 func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 	switch msg := msg.(type) {
 	case app.ProjectSelectedMsg:
-		p.projectInput.SetValue(msg.Path)
+		p.selectedProject = msg.Path
 		return p, nil
 
-	case west.BoardsLoadedMsg:
-		p.loading = false
-		if msg.Err != nil {
-			p.message = fmt.Sprintf("Error loading boards: %v", msg.Err)
-			return p, nil
-		}
-		p.boards = msg.Boards
-		p.filterBoards()
+	case app.BoardSelectedMsg:
+		p.selectedBoard = msg.Board
+		return p, nil
+
+	case app.ShieldSelectedMsg:
+		p.selectedShield = msg.Shield
 		return p, nil
 
 	case west.CommandResultMsg:
@@ -176,15 +138,14 @@ func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 				Timestamp: p.buildStart,
 				Success:   success,
 				Duration:  msg.Duration.String(),
-				Shield:    p.shieldInput.Value(),
+				Shield:    p.selectedShield,
 				Pristine:  p.pristine,
 				CMakeArgs: p.cmakeInput.Value(),
 			})
 		}
 
-		// Persist last project and board to config
+		// Persist board to config on success
 		if success {
-			p.cfg.LastProject = p.projectValue()
 			p.cfg.DefaultBoard = p.selectedBoard
 			config.Save(*p.cfg, p.wsRoot, false)
 		}
@@ -208,35 +169,6 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 	}
 
 	keyStr := msg.String()
-
-	// Handle board dropdown navigation when active
-	if p.boardListOpen {
-		switch keyStr {
-		case "up":
-			if p.boardCursor > 0 {
-				p.boardCursor--
-			} else {
-				// At top of list, return to input
-				p.boardListOpen = false
-			}
-			return p, nil
-		case "down":
-			if p.boardCursor < len(p.filteredBoards)-1 {
-				p.boardCursor++
-			}
-			return p, nil
-		case "enter":
-			if len(p.filteredBoards) > 0 {
-				p.boardInput.SetValue(p.filteredBoards[p.boardCursor].Name)
-				p.boardListOpen = false
-				p.filterBoards()
-			}
-			return p, nil
-		case "esc":
-			p.boardListOpen = false
-			return p, nil
-		}
-	}
 
 	// Global form keys
 	switch keyStr {
@@ -266,36 +198,6 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 
 	// Field-specific handling
 	switch p.focusedField {
-	case fieldBoard:
-		if keyStr == "down" {
-			if len(p.filteredBoards) > 0 && !p.boardListOpen {
-				// Open dropdown on first down press
-				p.boardListOpen = true
-				p.boardCursor = 0
-				return p, nil
-			} else if !p.boardListOpen {
-				// No dropdown, move to next field
-				p.advanceField(1)
-				return p, nil
-			}
-		}
-		if keyStr == "up" && !p.boardListOpen {
-			p.advanceField(-1)
-			return p, nil
-		}
-		if keyStr == "enter" {
-			// Select top match if available
-			if len(p.filteredBoards) > 0 {
-				p.boardInput.SetValue(p.filteredBoards[0].Name)
-				p.filterBoards()
-			}
-			return p, nil
-		}
-		var cmd tea.Cmd
-		p.boardInput, cmd = p.boardInput.Update(msg)
-		p.filterBoards()
-		return p, cmd
-
 	case fieldPristine:
 		switch keyStr {
 		case "enter", " ":
@@ -309,36 +211,6 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 			return p, nil
 		}
 		return p, nil
-
-	case fieldProject:
-		switch keyStr {
-		case "enter":
-			return p, p.startBuild()
-		case "up":
-			p.advanceField(-1)
-			return p, nil
-		case "down":
-			p.advanceField(1)
-			return p, nil
-		}
-		var cmd tea.Cmd
-		p.projectInput, cmd = p.projectInput.Update(msg)
-		return p, cmd
-
-	case fieldShield:
-		switch keyStr {
-		case "enter":
-			return p, p.startBuild()
-		case "up":
-			p.advanceField(-1)
-			return p, nil
-		case "down":
-			p.advanceField(1)
-			return p, nil
-		}
-		var cmd tea.Cmd
-		p.shieldInput, cmd = p.shieldInput.Update(msg)
-		return p, cmd
 
 	case fieldCMakeArgs:
 		switch keyStr {
@@ -362,28 +234,15 @@ func (p *BuildPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 func (p *BuildPage) advanceField(dir int) {
 	p.blurCurrent()
 	p.focusedField = formField((int(p.focusedField) + int(fieldCount) + dir) % int(fieldCount))
-	if p.focusedField != fieldBoard {
-		p.boardListOpen = false
-	}
 	p.focusCurrent()
 }
 
 func (p *BuildPage) blurAll() {
-	p.projectInput.Blur()
-	p.boardInput.Blur()
-	p.shieldInput.Blur()
 	p.cmakeInput.Blur()
-	p.boardListOpen = false
 }
 
 func (p *BuildPage) blurCurrent() {
 	switch p.focusedField {
-	case fieldProject:
-		p.projectInput.Blur()
-	case fieldBoard:
-		p.boardInput.Blur()
-	case fieldShield:
-		p.shieldInput.Blur()
 	case fieldCMakeArgs:
 		p.cmakeInput.Blur()
 	}
@@ -391,12 +250,6 @@ func (p *BuildPage) blurCurrent() {
 
 func (p *BuildPage) focusCurrent() {
 	switch p.focusedField {
-	case fieldProject:
-		p.projectInput.Focus()
-	case fieldBoard:
-		p.boardInput.Focus()
-	case fieldShield:
-		p.shieldInput.Focus()
 	case fieldCMakeArgs:
 		p.cmakeInput.Focus()
 	}
@@ -404,11 +257,7 @@ func (p *BuildPage) focusCurrent() {
 
 func (p *BuildPage) View() string {
 	// Split vertically: form on top, output below
-	formHeight := 12 // Fixed height for form
-	if p.focusedField == fieldBoard && len(p.filteredBoards) > 0 {
-		// Add space for board dropdown
-		formHeight += maxDropdownItems + 2
-	}
+	formHeight := 10 // Fixed height for form
 	outputHeight := p.height - formHeight - 1 // -1 for separator
 
 	if outputHeight < 5 {
@@ -427,25 +276,9 @@ func (p *BuildPage) viewForm(width int, height int) string {
 	b.WriteString(ui.Title("Build"))
 	b.WriteString("\n")
 
-	if p.loading {
-		b.WriteString("Loading boards...")
-		return b.String()
-	}
-
 	if p.message != "" {
 		b.WriteString(p.message + "\n\n")
 	}
-
-	inputWidth := width - labelWidth - 4 // padding
-	if inputWidth < 10 {
-		inputWidth = 10
-	}
-
-	// Temporarily set widths for rendering
-	p.projectInput.Width = inputWidth
-	p.boardInput.Width = inputWidth
-	p.shieldInput.Width = inputWidth
-	p.cmakeInput.Width = inputWidth
 
 	focusedLabel := lipgloss.NewStyle().Foreground(ui.Primary).Bold(true)
 	normalLabel := lipgloss.NewStyle().Foreground(ui.Text)
@@ -458,20 +291,27 @@ func (p *BuildPage) viewForm(width int, height int) string {
 		return normalLabel.Render(padded)
 	}
 
-	// Project
-	b.WriteString(renderLabel("Project", fieldProject) + " " + p.projectInput.View() + "\n")
-
-	// Board
-	b.WriteString(renderLabel("Board", fieldBoard) + " " + p.boardInput.View() + "\n")
-
-	// Board dropdown
-	if p.focusedField == fieldBoard && len(p.filteredBoards) > 0 {
-		dropdown := p.renderBoardDropdown(inputWidth)
-		b.WriteString(dropdown)
+	// Read-only context: project, board, shield
+	projectDisplay := p.selectedProject
+	if projectDisplay == "" {
+		projectDisplay = "."
+	}
+	boardDisplay := p.selectedBoard
+	if boardDisplay == "" {
+		boardDisplay = "(none)"
+	}
+	shieldDisplay := p.selectedShield
+	if shieldDisplay == "" {
+		shieldDisplay = "(none)"
 	}
 
-	// Shield
-	b.WriteString(renderLabel("Shield", fieldShield) + " " + p.shieldInput.View() + "\n")
+	infoStyle := lipgloss.NewStyle().Foreground(ui.Text)
+	dimStyle := ui.DimStyle
+
+	b.WriteString(normalLabel.Render(fmt.Sprintf("%-9s", "Building")) + " " + infoStyle.Render(projectDisplay) + "\n")
+	b.WriteString(normalLabel.Render(fmt.Sprintf("%-9s", "Board")) + " " + infoStyle.Render(boardDisplay) +
+		"  " + dimStyle.Render("Shield:") + " " + infoStyle.Render(shieldDisplay) + "\n")
+	b.WriteString("\n")
 
 	// Pristine
 	check := "[ ]"
@@ -484,6 +324,11 @@ func (p *BuildPage) viewForm(width int, height int) string {
 	b.WriteString(renderLabel("Pristine", fieldPristine) + " " + check + "\n")
 
 	// CMake args
+	inputWidth := width - labelWidth - 4 // padding
+	if inputWidth < 10 {
+		inputWidth = 10
+	}
+	p.cmakeInput.Width = inputWidth
 	b.WriteString(renderLabel("CMake", fieldCMakeArgs) + " " + p.cmakeInput.View() + "\n")
 
 	b.WriteString("\n")
@@ -492,53 +337,6 @@ func (p *BuildPage) viewForm(width int, height int) string {
 		helpText += "  y: copy output"
 	}
 	b.WriteString(ui.DimStyle.Render(helpText))
-
-	return b.String()
-}
-
-func (p *BuildPage) renderBoardDropdown(width int) string {
-	var b strings.Builder
-	padding := strings.Repeat(" ", labelWidth+1)
-
-	count := len(p.filteredBoards)
-	visible := count
-	if visible > maxDropdownItems {
-		visible = maxDropdownItems
-	}
-
-	// Scroll window around cursor
-	start := 0
-	if p.boardListOpen && p.boardCursor >= visible {
-		start = p.boardCursor - visible + 1
-	}
-	end := start + visible
-	if end > count {
-		end = count
-		start = end - visible
-		if start < 0 {
-			start = 0
-		}
-	}
-
-	selectedStyle := lipgloss.NewStyle().Foreground(ui.Primary).Bold(true)
-
-	for i := start; i < end; i++ {
-		name := p.filteredBoards[i].Name
-		if len(name) > width {
-			name = name[:width]
-		}
-		prefix := "  "
-		if p.boardListOpen && i == p.boardCursor {
-			prefix = selectedStyle.Render("> ")
-			name = selectedStyle.Render(name)
-		} else {
-			name = ui.DimStyle.Render(name)
-		}
-		b.WriteString(padding + prefix + name + "\n")
-	}
-
-	countStr := fmt.Sprintf("(%d/%d boards)", visible, count)
-	b.WriteString(padding + "  " + ui.DimStyle.Render(countStr) + "\n")
 
 	return b.String()
 }
@@ -602,9 +400,7 @@ func (p *BuildPage) ShortHelp() []key.Binding {
 }
 
 func (p *BuildPage) InputCaptured() bool {
-	return p.state == buildStateIdle && p.focusedField != fieldPristine &&
-		(p.projectInput.Focused() || p.boardInput.Focused() ||
-			p.shieldInput.Focused() || p.cmakeInput.Focused())
+	return p.state == buildStateIdle && p.cmakeInput.Focused()
 }
 
 func (p *BuildPage) SetSize(w, h int) {
@@ -613,32 +409,11 @@ func (p *BuildPage) SetSize(w, h int) {
 	// Viewport size will be set dynamically in viewOutput()
 }
 
-func (p *BuildPage) filterBoards() {
-	query := strings.ToLower(p.boardInput.Value())
-	if query == "" {
-		p.filteredBoards = p.boards
-	} else {
-		p.filteredBoards = nil
-		for _, b := range p.boards {
-			if strings.Contains(strings.ToLower(b.Name), query) {
-				p.filteredBoards = append(p.filteredBoards, b)
-			}
-		}
-	}
-	if p.boardCursor >= len(p.filteredBoards) {
-		p.boardCursor = len(p.filteredBoards) - 1
-	}
-	if p.boardCursor < 0 {
-		p.boardCursor = 0
-	}
-}
-
 func (p *BuildPage) projectValue() string {
-	v := p.projectInput.Value()
-	if v == "" {
+	if p.selectedProject == "" {
 		return "."
 	}
-	return v
+	return p.selectedProject
 }
 
 func (p *BuildPage) updateViewportContent() {
@@ -662,13 +437,12 @@ func (p *BuildPage) updateViewportContent() {
 }
 
 func (p *BuildPage) startBuild() tea.Cmd {
-	board := p.boardInput.Value()
+	board := p.selectedBoard
 	if board == "" {
-		p.message = "Board is required"
+		p.message = "Board is required. Select a board on the Project page."
 		return nil
 	}
 
-	p.selectedBoard = board
 	p.state = buildStateRunning
 	p.output.Reset()
 	p.buildStart = time.Now()
@@ -684,8 +458,8 @@ func (p *BuildPage) startBuild() tea.Cmd {
 	if p.pristine {
 		args = append(args, "-p", "always")
 	}
-	if shield := p.shieldInput.Value(); shield != "" {
-		args = append(args, "--shield", shield)
+	if p.selectedShield != "" {
+		args = append(args, "--shield", p.selectedShield)
 	}
 	if cmake := p.cmakeInput.Value(); cmake != "" {
 		args = append(args, "--")
