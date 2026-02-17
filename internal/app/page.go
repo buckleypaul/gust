@@ -10,25 +10,25 @@ type PageID int
 
 const (
 	WorkspacePage PageID = iota
+	ProjectPage
 	BuildPage
 	FlashPage
 	MonitorPage
 	TestPage
 	ArtifactsPage
 	WestPage
-	ConfigPage
 	SettingsPage
 )
 
 var PageOrder = []PageID{
 	WorkspacePage,
+	ProjectPage,
 	BuildPage,
 	FlashPage,
 	MonitorPage,
 	TestPage,
 	ArtifactsPage,
 	WestPage,
-	ConfigPage,
 	SettingsPage,
 }
 
