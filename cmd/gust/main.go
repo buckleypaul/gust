@@ -41,7 +41,7 @@ func main() {
 		app.TestPage:      pages.NewTestPage(st),
 		app.ArtifactsPage: pages.NewArtifactsPage(st),
 		app.WestPage:      pages.NewWestPage(),
-		app.ConfigPage:    pages.NewConfigPage(ws.Root),
+		app.ProjectPage:   pages.NewProjectPage(&cfg, ws.Root, ws.ManifestPath),
 		app.SettingsPage:  pages.NewSettingsPage(&cfg, ws.Root),
 	}
 
