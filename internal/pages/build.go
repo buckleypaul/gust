@@ -137,6 +137,10 @@ func (p *BuildPage) Init() tea.Cmd {
 
 func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 	switch msg := msg.(type) {
+	case app.ProjectSelectedMsg:
+		p.projectInput.SetValue(msg.Path)
+		return p, nil
+
 	case west.BoardsLoadedMsg:
 		p.loading = false
 		if msg.Err != nil {

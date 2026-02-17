@@ -45,7 +45,7 @@ func main() {
 		app.SettingsPage:  pages.NewSettingsPage(&cfg, ws.Root),
 	}
 
-	model := app.New(pageMap)
+	model := app.New(pageMap, &cfg, ws.Root, ws.ManifestPath)
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

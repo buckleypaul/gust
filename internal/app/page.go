@@ -48,3 +48,8 @@ type Page interface {
 type InputCapturer interface {
 	InputCaptured() bool
 }
+
+// ProjectSelectedMsg is broadcast to all pages when a project is selected.
+type ProjectSelectedMsg struct {
+	Path string
+}

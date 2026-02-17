@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -11,6 +10,19 @@ import (
 )
 
 const sidebarWidth = 22 // 20 content + 2 border/padding
+
+func renderProjectBar(selectedProject string, width int, sidebarFocused bool) string {
+	projectDisplay := "(none)"
+	if selectedProject != "" {
+		projectDisplay = selectedProject
+	}
+	left := ui.DimStyle.Render("Project: ") + projectDisplay
+	hint := ""
+	if sidebarFocused {
+		hint = ui.DimStyle.Render("  [p] change")
+	}
+	return ui.StatusBarStyle.Width(width).Render(left + hint)
+}
 
 func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, height int, focused bool) string {
 	var b strings.Builder
@@ -23,13 +35,12 @@ func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, heigh
 	b.WriteString(title)
 	b.WriteString("\n\n")
 
-	for i, id := range pages {
+	for _, id := range pages {
 		p := pageMap[id]
-		num := fmt.Sprintf("%d ", i+1)
 		if id == active {
-			b.WriteString(ui.SidebarActiveStyle.Render("▸ " + num + p.Name()))
+			b.WriteString(ui.SidebarActiveStyle.Render("▸ " + p.Name()))
 		} else {
-			b.WriteString(ui.SidebarItemStyle.Render("  " + num + p.Name()))
+			b.WriteString(ui.SidebarItemStyle.Render("  " + p.Name()))
 		}
 		b.WriteString("\n")
 	}
@@ -49,6 +60,7 @@ func renderStatusBar(pageHelp []key.Binding, width int, focus FocusArea) string 
 		parts = append(parts,
 			ui.StatusKey("↑/↓", "navigate"),
 			ui.StatusKey("enter", "select"),
+			ui.StatusKey("p", "project"),
 		)
 	} else {
 		// Page-specific keys when content is focused
@@ -62,7 +74,6 @@ func renderStatusBar(pageHelp []key.Binding, width int, focus FocusArea) string 
 	// Always add global keys
 	parts = append(parts,
 		ui.StatusKey("tab", "focus"),
-		ui.StatusKey("1-9", "jump"),
 		ui.StatusKey("?", "help"),
 		ui.StatusKey("q", "quit"),
 	)
@@ -71,7 +82,7 @@ func renderStatusBar(pageHelp []key.Binding, width int, focus FocusArea) string 
 	return ui.StatusBarStyle.Width(width).Render(line)
 }
 
-func renderLayout(sidebar, content, statusBar string) string {
+func renderLayout(projectBar, sidebar, content, statusBar string) string {
 	main := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, content)
-	return lipgloss.JoinVertical(lipgloss.Left, main, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, projectBar, main, statusBar)
 }

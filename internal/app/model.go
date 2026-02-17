@@ -3,8 +3,11 @@ package app
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
+	"github.com/buckleypaul/gust/internal/config"
 	"github.com/buckleypaul/gust/internal/ui"
+	"github.com/buckleypaul/gust/internal/west"
 )
 
 type FocusArea int
@@ -15,18 +18,26 @@ const (
 )
 
 type Model struct {
-	pages      map[PageID]Page
-	activePage PageID
-	focus      FocusArea
-	width      int
-	height     int
-	showHelp   bool
+	pages           map[PageID]Page
+	activePage      PageID
+	focus           FocusArea
+	width           int
+	height          int
+	showHelp        bool
+	selectedProject string
+	picker          *Picker
+	cfg             *config.Config
+	wsRoot          string
+	manifestPath    string
 }
 
-func New(pages map[PageID]Page) Model {
+func New(pages map[PageID]Page, cfg *config.Config, wsRoot string, manifestPath string) Model {
 	return Model{
-		pages:      pages,
-		activePage: WorkspacePage,
+		pages:           pages,
+		cfg:             cfg,
+		wsRoot:          wsRoot,
+		manifestPath:    manifestPath,
+		selectedProject: cfg.LastProject,
 	}
 }
 
@@ -46,13 +57,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		contentWidth := m.width - sidebarWidth
-		contentHeight := m.height - 2 // status bar
+		contentHeight := m.height - 2 - 1 // status bar + project bar
 		for _, p := range m.pages {
 			p.SetSize(contentWidth, contentHeight)
 		}
 		return m, nil
 
+	case west.ProjectsLoadedMsg:
+		if msg.Err != nil || m.picker == nil {
+			return m, nil
+		}
+		var items []PickerItem
+		for _, p := range msg.Projects {
+			items = append(items, PickerItem{
+				Label: p.Path,
+				Value: p.Path,
+				Desc:  p.Source,
+			})
+		}
+		m.picker.SetItems(items)
+		return m, nil
+
+	case PickerSelectedMsg:
+		m.selectedProject = msg.Value
+		m.picker = nil
+		// Persist to config
+		m.cfg.LastProject = msg.Value
+		config.Save(*m.cfg, m.wsRoot, false)
+		// Broadcast to all pages
+		return m, func() tea.Msg { return ProjectSelectedMsg{Path: msg.Value} }
+
+	case PickerClosedMsg:
+		m.picker = nil
+		return m, nil
+
 	case tea.KeyMsg:
+		// When picker is open, forward all keys to picker
+		if m.picker != nil {
+			var cmd tea.Cmd
+			m.picker, cmd = m.picker.Update(msg)
+			return m, cmd
+		}
+
 		// When a page has an active text input, forward all keys
 		// directly to the page — only ctrl+c still quits.
 		if m.focus == FocusContent {
@@ -82,36 +128,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// When content focused, fall through to page handler
 		}
 
-		// Number keys and other shortcuts only when sidebar is focused
+		// Sidebar-only shortcuts
 		if m.focus == FocusSidebar {
-			switch {
-			case key.Matches(msg, GlobalKeys.Page1):
-				m.setPage(0)
-				return m, nil
-			case key.Matches(msg, GlobalKeys.Page2):
-				m.setPage(1)
-				return m, nil
-			case key.Matches(msg, GlobalKeys.Page3):
-				m.setPage(2)
-				return m, nil
-			case key.Matches(msg, GlobalKeys.Page4):
-				m.setPage(3)
-				return m, nil
-			case key.Matches(msg, GlobalKeys.Page5):
-				m.setPage(4)
-				return m, nil
-			case key.Matches(msg, GlobalKeys.Page6):
-				m.setPage(5)
-				return m, nil
-			case key.Matches(msg, GlobalKeys.Page7):
-				m.setPage(6)
-				return m, nil
-			case key.Matches(msg, GlobalKeys.Page8):
-				m.setPage(7)
-				return m, nil
-			case key.Matches(msg, GlobalKeys.Page9):
-				m.setPage(8)
-				return m, nil
+			if key.Matches(msg, GlobalKeys.ProjectPicker) {
+				m.picker = NewPicker("Select Project")
+				contentWidth := m.width - sidebarWidth
+				contentHeight := m.height - 2 - 1
+				m.picker.SetSize(contentWidth, contentHeight)
+				return m, west.ListProjects(m.wsRoot, m.manifestPath)
 			}
 		}
 
@@ -166,18 +190,31 @@ func (m Model) View() string {
 	}
 
 	contentWidth := m.width - sidebarWidth
-	contentHeight := m.height - 2
+	contentHeight := m.height - 2 - 1 // status bar + project bar
 
 	page := m.pages[m.activePage]
 
+	projectBar := renderProjectBar(m.selectedProject, m.width, m.focus == FocusSidebar)
 	sidebar := renderSidebar(PageOrder, m.activePage, m.pages, contentHeight, m.focus == FocusSidebar)
 	content := ui.ContentStyle.
 		Width(contentWidth).
 		Height(contentHeight).
 		Render(page.View())
+
+	// Overlay picker on content area when open
+	if m.picker != nil {
+		m.picker.SetSize(contentWidth, contentHeight)
+		pickerView := m.picker.View()
+		content = lipgloss.Place(
+			contentWidth, contentHeight,
+			lipgloss.Center, lipgloss.Center,
+			pickerView,
+		)
+	}
+
 	statusBar := renderStatusBar(page.ShortHelp(), m.width, m.focus)
 
-	return renderLayout(sidebar, content, statusBar)
+	return renderLayout(projectBar, sidebar, content, statusBar)
 }
 
 func (m *Model) nextPage() {
@@ -198,8 +235,3 @@ func (m *Model) prevPage() {
 	}
 }
 
-func (m *Model) setPage(idx int) {
-	if idx >= 0 && idx < len(PageOrder) {
-		m.activePage = PageOrder[idx]
-	}
-}

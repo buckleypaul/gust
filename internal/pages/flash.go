@@ -16,13 +16,14 @@ import (
 )
 
 type FlashPage struct {
-	store      *store.Store
-	lastBuild  *store.BuildRecord
-	flashing   bool
-	output     strings.Builder
-	viewport   viewport.Model
-	flashStart time.Time
-	width, height int
+	store           *store.Store
+	lastBuild       *store.BuildRecord
+	selectedProject string
+	flashing        bool
+	output          strings.Builder
+	viewport        viewport.Model
+	flashStart      time.Time
+	width, height   int
 }
 
 func NewFlashPage(s *store.Store) *FlashPage {
@@ -37,6 +38,10 @@ func (p *FlashPage) Init() tea.Cmd { return nil }
 
 func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 	switch msg := msg.(type) {
+	case app.ProjectSelectedMsg:
+		p.selectedProject = msg.Path
+		return p, nil
+
 	case tea.KeyMsg:
 		if p.flashing {
 			var cmd tea.Cmd
@@ -105,6 +110,10 @@ func (p *FlashPage) View() string {
 	var b strings.Builder
 	b.WriteString(ui.Title("Flash"))
 	b.WriteString("\n")
+
+	if p.selectedProject != "" {
+		b.WriteString(fmt.Sprintf("  Project: %s\n", p.selectedProject))
+	}
 
 	p.refreshLastBuild()
 
