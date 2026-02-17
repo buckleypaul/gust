@@ -21,7 +21,8 @@ import (
 type projField int
 
 const (
-	projFieldBoard projField = iota
+	projFieldProject projField = iota
+	projFieldBoard
 	projFieldShield
 	projFieldKconfig
 	projFieldCount
@@ -36,9 +37,16 @@ type ProjectPage struct {
 	manifestPath string
 
 	// Hardware section
-	projectPath string
-	boardInput  textinput.Model
-	shieldInput textinput.Model
+	projectInput textinput.Model
+	boardInput   textinput.Model
+	shieldInput  textinput.Model
+
+	// Project type-ahead
+	projects         []west.Project
+	filteredProjects []west.Project
+	projectListOpen  bool
+	projectCursor    int
+	projectPath      string // confirmed selection
 
 	// Board type-ahead
 	boards         []west.Board
@@ -78,6 +86,14 @@ type ProjectPage struct {
 
 // NewProjectPage creates a new ProjectPage.
 func NewProjectPage(cfg *config.Config, wsRoot string, manifestPath string) *ProjectPage {
+	project := textinput.New()
+	project.Placeholder = "type to search..."
+	project.CharLimit = 256
+	project.Prompt = ""
+	if cfg.LastProject != "" {
+		project.SetValue(cfg.LastProject)
+	}
+
 	board := textinput.New()
 	board.Placeholder = "type to search..."
 	board.CharLimit = 128
@@ -109,24 +125,22 @@ func NewProjectPage(cfg *config.Config, wsRoot string, manifestPath string) *Pro
 	add.CharLimit = 256
 	add.Prompt = ""
 
-	projectPath := cfg.LastProject
-
 	p := &ProjectPage{
 		cfg:          cfg,
 		wsRoot:       wsRoot,
 		manifestPath: manifestPath,
-		projectPath:  projectPath,
+		projectInput: project,
 		boardInput:   board,
 		shieldInput:  shield,
 		searchInput:  search,
 		editInput:    edit,
 		addInput:     add,
-		focusedField: projFieldBoard,
+		projectPath:  cfg.LastProject,
+		focusedField: projFieldProject,
 	}
 
-	// Focus board by default
-	board.Focus()
-	p.boardInput = board
+	project.Focus()
+	p.projectInput = project
 
 	return p
 }
@@ -135,6 +149,7 @@ func (p *ProjectPage) Init() tea.Cmd {
 	p.loading = true
 	return tea.Batch(
 		west.ListBoards(),
+		west.ListProjects(p.wsRoot, p.manifestPath),
 		p.loadKconfig,
 	)
 }
@@ -142,10 +157,17 @@ func (p *ProjectPage) Init() tea.Cmd {
 func (p *ProjectPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 	switch msg := msg.(type) {
 	case app.ProjectSelectedMsg:
-		p.projectPath = msg.Path
-		p.cfg.LastProject = msg.Path
-		p.kconfigLoaded = false
-		return p, p.loadKconfig
+		// Only reload kconfig if the path actually changed (avoid double load
+		// when we broadcast our own selection and receive it back).
+		if msg.Path != p.projectPath {
+			p.projectPath = msg.Path
+			p.projectInput.SetValue(msg.Path)
+			p.filterProjects()
+			p.cfg.LastProject = msg.Path
+			p.kconfigLoaded = false
+			return p, p.loadKconfig
+		}
+		return p, nil
 
 	case app.BoardSelectedMsg:
 		p.boardInput.SetValue(msg.Board)
@@ -165,6 +187,13 @@ func (p *ProjectPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		}
 		p.boards = msg.Boards
 		p.filterBoards()
+		return p, nil
+
+	case west.ProjectsLoadedMsg:
+		if msg.Err == nil {
+			p.projects = msg.Projects
+			p.filterProjects()
+		}
 		return p, nil
 
 	case kconfigLoadedMsg:
@@ -265,6 +294,32 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		return p, cmd
 	}
 
+	// Project dropdown navigation when active
+	if p.projectListOpen {
+		switch keyStr {
+		case "up":
+			if p.projectCursor > 0 {
+				p.projectCursor--
+			} else {
+				p.projectListOpen = false
+			}
+			return p, nil
+		case "down":
+			if p.projectCursor < len(p.filteredProjects)-1 {
+				p.projectCursor++
+			}
+			return p, nil
+		case "enter":
+			if len(p.filteredProjects) > 0 {
+				return p, p.selectProject(p.filteredProjects[p.projectCursor].Path)
+			}
+			return p, nil
+		case "esc":
+			p.projectListOpen = false
+			return p, nil
+		}
+	}
+
 	// Board dropdown navigation when active
 	if p.boardListOpen {
 		switch keyStr {
@@ -309,12 +364,8 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 	case "shift+tab":
 		p.advanceField(-1)
 		return p, nil
-	case "p":
-		if p.focusedField != projFieldBoard && p.focusedField != projFieldShield {
-			// Trigger project picker at the Model level
-			return p, west.ListProjects(p.wsRoot, p.manifestPath)
-		}
 	case "esc":
+		p.projectListOpen = false
 		p.boardListOpen = false
 		p.blurAll()
 		return p, nil
@@ -322,6 +373,33 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 
 	// Field-specific handling
 	switch p.focusedField {
+	case projFieldProject:
+		switch keyStr {
+		case "down":
+			if len(p.filteredProjects) > 0 && !p.projectListOpen {
+				p.projectListOpen = true
+				p.projectCursor = 0
+				return p, nil
+			} else if !p.projectListOpen {
+				p.advanceField(1)
+				return p, nil
+			}
+		case "up":
+			if !p.projectListOpen {
+				p.advanceField(-1)
+				return p, nil
+			}
+		case "enter":
+			if len(p.filteredProjects) > 0 {
+				return p, p.selectProject(p.filteredProjects[0].Path)
+			}
+			return p, nil
+		}
+		var cmd tea.Cmd
+		p.projectInput, cmd = p.projectInput.Update(msg)
+		p.filterProjects()
+		return p, cmd
+
 	case projFieldBoard:
 		switch keyStr {
 		case "down":
@@ -423,9 +501,28 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 	return p, nil
 }
 
+// selectProject confirms a project selection, saves config, reloads kconfig,
+// and broadcasts ProjectSelectedMsg.
+func (p *ProjectPage) selectProject(path string) tea.Cmd {
+	p.projectPath = path
+	p.projectInput.SetValue(path)
+	p.projectListOpen = false
+	p.filterProjects()
+	p.cfg.LastProject = path
+	config.Save(*p.cfg, p.wsRoot, false)
+	p.kconfigLoaded = false
+	return tea.Batch(
+		p.loadKconfig,
+		func() tea.Msg { return app.ProjectSelectedMsg{Path: path} },
+	)
+}
+
 func (p *ProjectPage) advanceField(dir int) {
 	p.blurCurrent()
 	p.focusedField = projField((int(p.focusedField) + int(projFieldCount) + dir) % int(projFieldCount))
+	if p.focusedField != projFieldProject {
+		p.projectListOpen = false
+	}
 	if p.focusedField != projFieldBoard {
 		p.boardListOpen = false
 	}
@@ -433,13 +530,17 @@ func (p *ProjectPage) advanceField(dir int) {
 }
 
 func (p *ProjectPage) blurAll() {
+	p.projectInput.Blur()
 	p.boardInput.Blur()
 	p.shieldInput.Blur()
+	p.projectListOpen = false
 	p.boardListOpen = false
 }
 
 func (p *ProjectPage) blurCurrent() {
 	switch p.focusedField {
+	case projFieldProject:
+		p.projectInput.Blur()
 	case projFieldBoard:
 		p.boardInput.Blur()
 	case projFieldShield:
@@ -449,6 +550,8 @@ func (p *ProjectPage) blurCurrent() {
 
 func (p *ProjectPage) focusCurrent() {
 	switch p.focusedField {
+	case projFieldProject:
+		p.projectInput.Focus()
 	case projFieldBoard:
 		p.boardInput.Focus()
 	case projFieldShield:
@@ -483,18 +586,19 @@ func (p *ProjectPage) View() string {
 	if inputWidth < 10 {
 		inputWidth = 10
 	}
+	p.projectInput.Width = inputWidth
 	p.boardInput.Width = inputWidth
 	p.shieldInput.Width = inputWidth
 
 	// -- Hardware section --
 
-	// Project path row (display + [p] hint)
-	projectDisplay := p.projectPath
-	if projectDisplay == "" {
-		projectDisplay = ui.DimStyle.Render("(none selected)")
+	// Project input
+	b.WriteString("  " + renderLabel("Project", projFieldProject) + " " + p.projectInput.View() + "\n")
+
+	// Project dropdown
+	if p.focusedField == projFieldProject && len(p.filteredProjects) > 0 {
+		b.WriteString(p.renderProjectDropdown(inputWidth))
 	}
-	projectLabel := fmt.Sprintf("%-*s", lw, "Project")
-	b.WriteString("  " + normalLabel.Render(projectLabel) + " " + projectDisplay + "  " + ui.DimStyle.Render("[p]") + "\n")
 
 	// Board input
 	b.WriteString("  " + renderLabel("Board", projFieldBoard) + " " + p.boardInput.View() + "\n")
@@ -610,7 +714,53 @@ func (p *ProjectPage) View() string {
 	b.WriteString("\n")
 
 	// Help bar
-	b.WriteString(ui.DimStyle.Render("  tab: next  p: project  /: search  e: edit  a: add  d: delete"))
+	b.WriteString(ui.DimStyle.Render("  tab: next  /: search  e: edit  a: add  d: delete"))
+
+	return b.String()
+}
+
+func (p *ProjectPage) renderProjectDropdown(width int) string {
+	var b strings.Builder
+	padding := strings.Repeat(" ", 9+3) // lw + "  " prefix + " " after label
+
+	count := len(p.filteredProjects)
+	visible := count
+	if visible > maxDropdownItems {
+		visible = maxDropdownItems
+	}
+
+	start := 0
+	if p.projectListOpen && p.projectCursor >= visible {
+		start = p.projectCursor - visible + 1
+	}
+	end := start + visible
+	if end > count {
+		end = count
+		start = end - visible
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	selectedStyle := lipgloss.NewStyle().Foreground(ui.Primary).Bold(true)
+
+	for i := start; i < end; i++ {
+		path := p.filteredProjects[i].Path
+		if len(path) > width {
+			path = path[:width]
+		}
+		prefix := "  "
+		if p.projectListOpen && i == p.projectCursor {
+			prefix = selectedStyle.Render("> ")
+			path = selectedStyle.Render(path)
+		} else {
+			path = ui.DimStyle.Render(path)
+		}
+		b.WriteString(padding + prefix + path + "\n")
+	}
+
+	countStr := fmt.Sprintf("(%d/%d projects)", visible, count)
+	b.WriteString(padding + "  " + ui.DimStyle.Render(countStr) + "\n")
 
 	return b.String()
 }
@@ -684,7 +834,6 @@ func (p *ProjectPage) ShortHelp() []key.Binding {
 	}
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next field")),
-		key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "project picker")),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add")),
@@ -693,7 +842,7 @@ func (p *ProjectPage) ShortHelp() []key.Binding {
 }
 
 func (p *ProjectPage) InputCaptured() bool {
-	return p.boardInput.Focused() || p.shieldInput.Focused() || p.editing || p.adding || p.searchInput.Focused()
+	return p.projectInput.Focused() || p.boardInput.Focused() || p.shieldInput.Focused() || p.editing || p.adding || p.searchInput.Focused()
 }
 
 func (p *ProjectPage) SetSize(w, h int) {
@@ -727,6 +876,27 @@ func (p *ProjectPage) loadOverlay() {
 	overlayPath := filepath.Join(p.projectPath, "boards", boardFile+".overlay")
 	_, err := os.Stat(overlayPath)
 	p.overlayExists = err == nil
+}
+
+// filterProjects narrows the project list based on the current input.
+func (p *ProjectPage) filterProjects() {
+	query := strings.ToLower(p.projectInput.Value())
+	if query == "" {
+		p.filteredProjects = p.projects
+	} else {
+		p.filteredProjects = nil
+		for _, proj := range p.projects {
+			if strings.Contains(strings.ToLower(proj.Path), query) {
+				p.filteredProjects = append(p.filteredProjects, proj)
+			}
+		}
+	}
+	if p.projectCursor >= len(p.filteredProjects) {
+		p.projectCursor = len(p.filteredProjects) - 1
+	}
+	if p.projectCursor < 0 {
+		p.projectCursor = 0
+	}
 }
 
 // filterBoards narrows the board list based on the current input.

@@ -12,7 +12,7 @@ import (
 
 const sidebarWidth = 22 // 20 content + 2 border/padding
 
-func renderProjectBar(selectedProject, selectedBoard string, width int, sidebarFocused bool) string {
+func renderProjectBar(selectedProject, selectedBoard string, width int) string {
 	projectDisplay := selectedProject
 	if projectDisplay == "" {
 		projectDisplay = "(none)"
@@ -22,11 +22,7 @@ func renderProjectBar(selectedProject, selectedBoard string, width int, sidebarF
 		boardDisplay = "(none)"
 	}
 	content := fmt.Sprintf("Project: %s  Board: %s", projectDisplay, boardDisplay)
-	hint := ""
-	if sidebarFocused {
-		hint = ui.DimStyle.Render("  [p] change")
-	}
-	return ui.StatusBarStyle.Width(width).Render(content + hint)
+	return ui.StatusBarStyle.Width(width).Render(content)
 }
 
 func renderSidebar(pages []PageID, active PageID, pageMap map[PageID]Page, height int, focused bool) string {
@@ -65,7 +61,6 @@ func renderStatusBar(pageHelp []key.Binding, width int, focus FocusArea) string 
 		parts = append(parts,
 			ui.StatusKey("↑/↓", "navigate"),
 			ui.StatusKey("enter", "select"),
-			ui.StatusKey("p", "project"),
 		)
 	} else {
 		// Page-specific keys when content is focused
