@@ -20,6 +20,7 @@ type Config struct {
 	FlashRunner    string `json:"flash_runner,omitempty"`
 	VenvPath       string `json:"venv_path,omitempty"`
 	LastProject    string `json:"last_project,omitempty"`
+	LastShield     string `json:"last_shield,omitempty"`
 }
 
 // Defaults returns a Config with default values.
@@ -107,5 +108,8 @@ func mergeFromFile(cfg *Config, path string) {
 	}
 	if fileCfg.LastProject != "" {
 		cfg.LastProject = fileCfg.LastProject
+	}
+	if fileCfg.LastShield != "" {
+		cfg.LastShield = fileCfg.LastShield
 	}
 }

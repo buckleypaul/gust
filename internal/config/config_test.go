@@ -71,3 +71,21 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Errorf("expected SerialBaudRate=57600, got=%d", loaded.SerialBaudRate)
 	}
 }
+
+func TestLastShieldPersistence(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := Config{
+		LastProject: "samples/ble-beacon",
+		LastShield:  "nrf7002ek",
+	}
+
+	err := Save(cfg, tmp, false)
+	if err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded := Load(tmp)
+	if loaded.LastShield != "nrf7002ek" {
+		t.Errorf("expected LastShield=nrf7002ek, got=%s", loaded.LastShield)
+	}
+}
