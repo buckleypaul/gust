@@ -295,6 +295,32 @@ func TestProjectPageFTriggerFlash(t *testing.T) {
 	}
 }
 
+func TestProjectPageBuildDirChangedMsgUpdatesInput(t *testing.T) {
+	wsRoot := t.TempDir()
+	cfg := config.Defaults()
+	p := NewProjectPage(nil, &cfg, wsRoot, "")
+
+	page, _ := p.Update(app.BuildDirChangedMsg{Dir: "build-xyz"})
+	p = page.(*ProjectPage)
+
+	if p.buildDirInput.Value() != "build-xyz" {
+		t.Fatalf("expected buildDirInput to be %q, got %q", "build-xyz", p.buildDirInput.Value())
+	}
+}
+
+func TestProjectPageFlashRunnerChangedMsgUpdatesInput(t *testing.T) {
+	wsRoot := t.TempDir()
+	cfg := config.Defaults()
+	p := NewProjectPage(nil, &cfg, wsRoot, "")
+
+	page, _ := p.Update(app.FlashRunnerChangedMsg{Runner: "openocd"})
+	p = page.(*ProjectPage)
+
+	if p.runnerInput.Value() != "openocd" {
+		t.Fatalf("expected runnerInput to be %q, got %q", "openocd", p.runnerInput.Value())
+	}
+}
+
 func TestProjectPageIgnoresForeignCommandResult(t *testing.T) {
 	cfg := config.Defaults()
 	p := NewProjectPage(nil, &cfg, t.TempDir(), "")
