@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/buckleypaul/gust/internal/app"
 	"github.com/buckleypaul/gust/internal/config"
@@ -231,4 +232,87 @@ func findEntryIndex(entries []kconfigEntry, name string) int {
 		}
 	}
 	return 0
+}
+
+func TestProjectPageCtrlBTriggersBuild(t *testing.T) {
+	wsRoot := t.TempDir()
+	cfg := config.Defaults()
+	cfg.DefaultBoard = "nrf52840dk"
+	cfg.BuildDir = "build-custom"
+	fake := &fakeRunner{nextMsg: west.CommandResultMsg{Output: "ok", ExitCode: 0, Duration: time.Second}}
+
+	p := NewProjectPage(nil, &cfg, wsRoot, "", fake)
+	p.boardInput.SetValue("nrf52840dk")
+	p.buildDirInput.SetValue("build-custom")
+
+	page, cmd := p.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	_ = page
+	if cmd == nil {
+		t.Fatal("expected command from ctrl+b")
+	}
+	_ = cmd()
+
+	if len(fake.runCalls) != 1 {
+		t.Fatalf("expected 1 run call, got %d", len(fake.runCalls))
+	}
+	args := fake.runCalls[0].args
+	found := false
+	for i, a := range args {
+		if a == "-d" && i+1 < len(args) && args[i+1] == "build-custom" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected -d build-custom in west build args, got %v", args)
+	}
+}
+
+func TestProjectPageFTriggerFlash(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.BuildDir = "build-custom"
+	cfg.FlashRunner = "jlink"
+	fake := &fakeRunner{nextMsg: west.CommandResultMsg{Output: "ok", ExitCode: 0, Duration: time.Second}}
+
+	p := NewProjectPage(nil, &cfg, t.TempDir(), "", fake)
+	p.buildDirInput.SetValue("build-custom")
+	p.runnerInput.SetValue("jlink")
+
+	page, cmd := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	_ = page
+	if cmd == nil {
+		t.Fatal("expected command from f")
+	}
+	_ = cmd()
+
+	args := fake.runCalls[0].args
+	argStr := strings.Join(args, " ")
+	if !strings.Contains(argStr, "-d build-custom") {
+		t.Fatalf("expected -d build-custom, got %v", args)
+	}
+	if !strings.Contains(argStr, "--runner jlink") {
+		t.Fatalf("expected --runner jlink, got %v", args)
+	}
+}
+
+func TestProjectPageIgnoresForeignCommandResult(t *testing.T) {
+	cfg := config.Defaults()
+	p := NewProjectPage(nil, &cfg, t.TempDir(), "")
+	p.activeRequestID = "build-1"
+	p.activeOp = "Build"
+	p.build.state = buildStateRunning
+
+	page, _ := p.Update(west.CommandResultMsg{
+		RequestID: "build-2",
+		Output:    "foreign",
+		ExitCode:  1,
+	})
+	updated := page.(*ProjectPage)
+
+	if updated.build.state != buildStateRunning {
+		t.Fatalf("expected build to remain running, got %v", updated.build.state)
+	}
+	if updated.output.Len() != 0 {
+		t.Fatal("expected no output for foreign result")
+	}
 }

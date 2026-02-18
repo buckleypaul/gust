@@ -11,6 +11,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/ansi"
+	"github.com/muesli/reflow/truncate"
+	"github.com/muesli/reflow/wrap"
 
 	"github.com/buckleypaul/gust/internal/app"
 	"github.com/buckleypaul/gust/internal/config"
@@ -185,9 +188,6 @@ func NewProjectPage(s *store.Store, cfg *config.Config, wsRoot string, manifestP
 		viewport:      viewport.New(0, 0),
 	}
 
-	project.Focus()
-	p.projectInput = project
-
 	return p
 }
 
@@ -261,6 +261,26 @@ func (p *ProjectPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			p.filterKconfig()
 		}
 		p.loadOverlay()
+		return p, nil
+
+	case west.CommandResultMsg:
+		if p.activeRequestID == "" || msg.RequestID != p.activeRequestID {
+			return p, nil
+		}
+		p.activeRequestID = ""
+		board := p.boardInput.Value()
+		switch p.activeOp {
+		case "Build":
+			p.build.complete(msg, board, p.projectValue(), p.shieldInput.Value(), p.buildDirInput.Value(), p.store, p.wsRoot, &p.output)
+			if msg.ExitCode == 0 {
+				p.cfg.DefaultBoard = board
+				_ = config.Save(*p.cfg, p.wsRoot, false)
+			}
+		case "Flash":
+			p.flash.complete(msg, board, p.store, &p.output)
+		}
+		p.updateViewportContent()
+		p.viewport.GotoBottom()
 		return p, nil
 
 	case tea.KeyMsg:
@@ -418,7 +438,20 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 
 	// Global form keys
 	switch keyStr {
+	case "ctrl+b":
+		return p, p.triggerBuild()
+	case "f":
+		if !p.InputCaptured() {
+			return p, p.triggerFlash()
+		}
 	case "esc":
+		if p.output.Len() > 0 && !p.adding && !p.editing && !p.searchInput.Focused() {
+			p.output.Reset()
+			p.viewport.SetContent("")
+			p.activeOp = ""
+			p.activeRequestID = ""
+			return p, nil
+		}
 		p.projectListOpen = false
 		p.boardListOpen = false
 		p.blurAll()
@@ -590,6 +623,27 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 			}
 			return p, nil
 		}
+
+	case projFieldCMake:
+		switch keyStr {
+		case "enter":
+			return p, p.triggerBuild()
+		case "up":
+			p.advanceField(-1)
+			return p, nil
+		case "down":
+			p.advanceField(1)
+			return p, nil
+		}
+		var cmd tea.Cmd
+		p.build.cmakeInput, cmd = p.build.cmakeInput.Update(msg)
+		return p, cmd
+	}
+
+	if p.output.Len() > 0 {
+		var cmd tea.Cmd
+		p.viewport, cmd = p.viewport.Update(msg)
+		return p, cmd
 	}
 
 	return p, nil
@@ -667,6 +721,60 @@ func (p *ProjectPage) focusCurrent() {
 		p.runnerInput.Focus()
 	case projFieldCMake:
 		p.build.cmakeInput.Focus()
+	}
+}
+
+func (p *ProjectPage) projectValue() string {
+	if p.projectPath == "" {
+		return "."
+	}
+	return p.projectPath
+}
+
+func (p *ProjectPage) triggerBuild() tea.Cmd {
+	board := p.boardInput.Value()
+	if board == "" {
+		p.message = "Board is required. Set a board above."
+		return nil
+	}
+	p.output.Reset()
+	p.activeOp = "Build"
+	requestID, cmd := p.build.start(
+		p.wsRoot, p.projectValue(), board,
+		p.shieldInput.Value(), p.buildDirInput.Value(),
+		p.runner, &p.output,
+	)
+	p.activeRequestID = requestID
+	p.updateViewportContent()
+	return cmd
+}
+
+func (p *ProjectPage) triggerFlash() tea.Cmd {
+	p.flash.refreshLastBuild(p.store)
+	p.output.Reset()
+	p.activeOp = "Flash"
+	requestID, cmd := p.flash.start(
+		p.buildDirInput.Value(), p.runnerInput.Value(),
+		p.runner, &p.output,
+	)
+	p.activeRequestID = requestID
+	p.updateViewportContent()
+	return cmd
+}
+
+func (p *ProjectPage) updateViewportContent() {
+	if p.viewport.Width > 0 {
+		content := p.output.String()
+		wrapped := wrap.String(content, p.viewport.Width)
+		lines := strings.Split(wrapped, "\n")
+		for i, line := range lines {
+			if ansi.PrintableRuneWidth(line) > p.viewport.Width {
+				lines[i] = truncate.String(line, uint(p.viewport.Width))
+			}
+		}
+		p.viewport.SetContent(strings.Join(lines, "\n"))
+	} else {
+		p.viewport.SetContent(p.output.String())
 	}
 }
 
