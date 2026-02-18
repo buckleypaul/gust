@@ -221,7 +221,7 @@ func TestBuildSectionCompleteRecordsToStore(t *testing.T) {
 	var out strings.Builder
 	b.complete(
 		west.CommandResultMsg{Output: "ok", ExitCode: 0, Duration: time.Second},
-		"nrf52840dk", ".", "", "",
+		"nrf52840dk", ".", "", "build-custom",
 		st, wsRoot, &out,
 	)
 
@@ -234,5 +234,8 @@ func TestBuildSectionCompleteRecordsToStore(t *testing.T) {
 	}
 	if !builds[0].Success {
 		t.Fatal("expected success build record")
+	}
+	if builds[0].BuildDir != "build-custom" {
+		t.Fatalf("expected BuildDir build-custom, got %q", builds[0].BuildDir)
 	}
 }
