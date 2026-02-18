@@ -62,3 +62,13 @@ type BoardSelectedMsg struct {
 type ShieldSelectedMsg struct {
 	Shield string
 }
+
+// BuildDirChangedMsg is broadcast to all pages when the build directory changes.
+type BuildDirChangedMsg struct {
+	Dir string
+}
+
+// FlashRunnerChangedMsg is broadcast to all pages when the flash runner changes.
+type FlashRunnerChangedMsg struct {
+	Runner string
+}

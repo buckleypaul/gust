@@ -167,7 +167,7 @@ func TestProjectPageAddEditDeleteFlow(t *testing.T) {
 	}
 }
 
-func TestProjectPageBoardDropdownSelection(t *testing.T) {
+func TestProjectPageBoardEnterSelection(t *testing.T) {
 	wsRoot := t.TempDir()
 	cfg := config.Defaults()
 	p := NewProjectPage(&cfg, wsRoot, "")
@@ -175,14 +175,7 @@ func TestProjectPageBoardDropdownSelection(t *testing.T) {
 	p.boards = []west.Board{{Name: "board-a"}, {Name: "board-b"}}
 	p.filterBoards()
 
-	p = updateProjectPage(p, tea.KeyMsg{Type: tea.KeyDown})
-	if !p.boardListOpen {
-		t.Fatal("expected board list to open")
-	}
-	p = updateProjectPage(p, tea.KeyMsg{Type: tea.KeyDown})
-	if p.boardCursor != 1 {
-		t.Fatalf("expected cursor=1, got %d", p.boardCursor)
-	}
+	// Enter on Board field selects the first filtered result
 	page, cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	p = page.(*ProjectPage)
 	if cmd == nil {
@@ -193,14 +186,11 @@ func TestProjectPageBoardDropdownSelection(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected BoardSelectedMsg, got %T", msg)
 	}
-	if boardMsg.Board != "board-b" {
-		t.Fatalf("expected board-b, got %s", boardMsg.Board)
+	if boardMsg.Board != "board-a" {
+		t.Fatalf("expected board-a, got %s", boardMsg.Board)
 	}
-	if p.boardInput.Value() != "board-b" {
+	if p.boardInput.Value() != "board-a" {
 		t.Fatalf("expected board input to be set, got %q", p.boardInput.Value())
-	}
-	if p.boardListOpen {
-		t.Fatal("expected board list to close after selection")
 	}
 }
 

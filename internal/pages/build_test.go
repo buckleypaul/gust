@@ -55,6 +55,75 @@ func TestBuildPageAcceptsMatchingCommandResult(t *testing.T) {
 	}
 }
 
+func TestBuildPageStartBuildPassesBuildDir(t *testing.T) {
+	wsRoot := t.TempDir()
+	cfg := config.Defaults()
+	cfg.DefaultBoard = "nrf52840dk_nrf52840"
+	cfg.BuildDir = "build-custom"
+	fake := &fakeRunner{
+		nextMsg: west.CommandResultMsg{
+			Output:   "ok",
+			ExitCode: 0,
+			Duration: time.Second,
+		},
+	}
+
+	p := NewBuildPage(nil, &cfg, wsRoot, fake)
+	p.selectedBoard = "nrf52840dk_nrf52840"
+
+	cmd := p.startBuild()
+	if cmd == nil {
+		t.Fatal("expected command")
+	}
+	_ = cmd()
+
+	if len(fake.runCalls) != 1 {
+		t.Fatalf("expected 1 run call, got %d", len(fake.runCalls))
+	}
+	args := fake.runCalls[0].args
+	// Look for -d build-custom in args
+	found := false
+	for i, a := range args {
+		if a == "-d" && i+1 < len(args) && args[i+1] == "build-custom" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected -d build-custom in args, got %v", args)
+	}
+}
+
+func TestBuildPageStartBuildOmitsBuildDirWhenEmpty(t *testing.T) {
+	wsRoot := t.TempDir()
+	cfg := config.Defaults()
+	cfg.DefaultBoard = "nrf52840dk_nrf52840"
+	cfg.BuildDir = ""
+	fake := &fakeRunner{
+		nextMsg: west.CommandResultMsg{
+			Output:   "ok",
+			ExitCode: 0,
+			Duration: time.Second,
+		},
+	}
+
+	p := NewBuildPage(nil, &cfg, wsRoot, fake)
+	p.selectedBoard = "nrf52840dk_nrf52840"
+
+	cmd := p.startBuild()
+	if cmd == nil {
+		t.Fatal("expected command")
+	}
+	_ = cmd()
+
+	args := fake.runCalls[0].args
+	for _, a := range args {
+		if a == "-d" {
+			t.Fatalf("expected no -d flag when buildDir is empty, got %v", args)
+		}
+	}
+}
+
 func TestBuildPageStartBuildUsesInjectedRunner(t *testing.T) {
 	wsRoot := t.TempDir()
 	cfg := config.Defaults()

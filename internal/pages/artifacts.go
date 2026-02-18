@@ -82,12 +82,13 @@ func (p *ArtifactsPage) renderBuilds(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("Error: %v\n", err))
 		return
 	}
-	if len(builds) == 0 {
-		b.WriteString(ui.DimStyle.Render("No build records yet."))
-		return
-	}
+	count := 0
 	for i := len(builds) - 1; i >= 0; i-- {
 		r := builds[i]
+		if r.Timestamp.IsZero() {
+			continue
+		}
+		count++
 		status := ui.SuccessBadge("OK")
 		if !r.Success {
 			status = ui.ErrorBadge("FAIL")
@@ -95,6 +96,9 @@ func (p *ArtifactsPage) renderBuilds(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("  %s  %-30s  %s  %s\n",
 			r.Timestamp.Format("Jan 02 15:04"),
 			r.Board, r.Duration, status))
+	}
+	if count == 0 {
+		b.WriteString(ui.DimStyle.Render("No build records yet."))
 	}
 }
 
@@ -104,12 +108,13 @@ func (p *ArtifactsPage) renderFlashes(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("Error: %v\n", err))
 		return
 	}
-	if len(flashes) == 0 {
-		b.WriteString(ui.DimStyle.Render("No flash records yet."))
-		return
-	}
+	count := 0
 	for i := len(flashes) - 1; i >= 0; i-- {
 		r := flashes[i]
+		if r.Timestamp.IsZero() {
+			continue
+		}
+		count++
 		status := ui.SuccessBadge("OK")
 		if !r.Success {
 			status = ui.ErrorBadge("FAIL")
@@ -117,6 +122,9 @@ func (p *ArtifactsPage) renderFlashes(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("  %s  %-30s  %s  %s\n",
 			r.Timestamp.Format("Jan 02 15:04"),
 			r.Board, r.Duration, status))
+	}
+	if count == 0 {
+		b.WriteString(ui.DimStyle.Render("No flash records yet."))
 	}
 }
 
@@ -126,12 +134,13 @@ func (p *ArtifactsPage) renderTests(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("Error: %v\n", err))
 		return
 	}
-	if len(tests) == 0 {
-		b.WriteString(ui.DimStyle.Render("No test records yet."))
-		return
-	}
+	count := 0
 	for i := len(tests) - 1; i >= 0; i-- {
 		r := tests[i]
+		if r.Timestamp.IsZero() {
+			continue
+		}
+		count++
 		status := ui.SuccessBadge("PASS")
 		if !r.Success {
 			status = ui.ErrorBadge("FAIL")
@@ -139,6 +148,9 @@ func (p *ArtifactsPage) renderTests(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("  %s  %-30s  %s  %s\n",
 			r.Timestamp.Format("Jan 02 15:04"),
 			r.Board, r.Duration, status))
+	}
+	if count == 0 {
+		b.WriteString(ui.DimStyle.Render("No test records yet."))
 	}
 }
 

@@ -110,6 +110,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case BuildDirChangedMsg:
+		// Broadcast to all pages
+		var cmds []tea.Cmd
+		for id, page := range m.pages {
+			newPage, cmd := page.Update(msg)
+			m.pages[id] = newPage
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
+
+	case FlashRunnerChangedMsg:
+		// Broadcast to all pages
+		var cmds []tea.Cmd
+		for id, page := range m.pages {
+			newPage, cmd := page.Update(msg)
+			m.pages[id] = newPage
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
+
 	case tea.KeyMsg:
 		// When a page has an active text input, forward all keys
 		// directly to the page — only ctrl+c still quits.

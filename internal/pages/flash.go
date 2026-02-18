@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/buckleypaul/gust/internal/app"
+	"github.com/buckleypaul/gust/internal/config"
 	"github.com/buckleypaul/gust/internal/store"
 	"github.com/buckleypaul/gust/internal/ui"
 	"github.com/buckleypaul/gust/internal/west"
@@ -17,9 +18,15 @@ import (
 
 type FlashPage struct {
 	store           *store.Store
+	cfg             *config.Config
+	wsRoot          string
 	runner          west.Runner
 	lastBuild       *store.BuildRecord
 	selectedProject string
+	selectedBoard   string
+	selectedShield  string
+	buildDir        string
+	flashRunner     string
 	flashing        bool
 	output          strings.Builder
 	viewport        viewport.Model
@@ -30,16 +37,22 @@ type FlashPage struct {
 	message         string
 }
 
-func NewFlashPage(s *store.Store, runners ...west.Runner) *FlashPage {
+func NewFlashPage(s *store.Store, cfg *config.Config, wsRoot string, runners ...west.Runner) *FlashPage {
 	vp := viewport.New(0, 0)
 	runner := west.RealRunner()
 	if len(runners) > 0 && runners[0] != nil {
 		runner = runners[0]
 	}
 	return &FlashPage{
-		store:    s,
-		runner:   runner,
-		viewport: vp,
+		store:          s,
+		cfg:            cfg,
+		wsRoot:         wsRoot,
+		runner:         runner,
+		viewport:       vp,
+		selectedBoard:  cfg.DefaultBoard,
+		selectedShield: cfg.LastShield,
+		buildDir:       cfg.BuildDir,
+		flashRunner:    cfg.FlashRunner,
 	}
 }
 
@@ -49,6 +62,22 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 	switch msg := msg.(type) {
 	case app.ProjectSelectedMsg:
 		p.selectedProject = msg.Path
+		return p, nil
+
+	case app.BoardSelectedMsg:
+		p.selectedBoard = msg.Board
+		return p, nil
+
+	case app.ShieldSelectedMsg:
+		p.selectedShield = msg.Shield
+		return p, nil
+
+	case app.BuildDirChangedMsg:
+		p.buildDir = msg.Dir
+		return p, nil
+
+	case app.FlashRunnerChangedMsg:
+		p.flashRunner = msg.Runner
 		return p, nil
 
 	case tea.KeyMsg:
@@ -67,13 +96,17 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 			p.output.Reset()
 			p.flashStart = time.Now()
 
-			board := ""
-			if p.lastBuild != nil {
-				board = p.lastBuild.Board
+			args := []string{"flash"}
+			if p.buildDir != "" {
+				args = append(args, "-d", p.buildDir)
 			}
-			p.output.WriteString(fmt.Sprintf("Flashing %s...\n\n", board))
+			if p.flashRunner != "" {
+				args = append(args, "--runner", p.flashRunner)
+			}
+
+			p.output.WriteString("$ west " + strings.Join(args, " ") + "\n\n")
 			p.viewport.SetContent(p.output.String())
-			return p, west.WithRequestID(requestID, p.runner.Run("west", "flash"))
+			return p, west.WithRequestID(requestID, p.runner.Run("west", args...))
 		case "c":
 			p.output.Reset()
 			p.viewport.SetContent("")
@@ -102,13 +135,9 @@ func (p *FlashPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		p.viewport.GotoBottom()
 
 		// Record flash
-		board := ""
-		if p.lastBuild != nil {
-			board = p.lastBuild.Board
-		}
 		if p.store != nil {
 			if err := p.store.AddFlash(store.FlashRecord{
-				Board:     board,
+				Board:     p.selectedBoard,
 				Timestamp: p.flashStart,
 				Success:   success,
 				Duration:  msg.Duration.String(),
@@ -131,6 +160,15 @@ func (p *FlashPage) View() string {
 	var statusB strings.Builder
 	if p.selectedProject != "" {
 		statusB.WriteString(fmt.Sprintf("  Project: %s\n", p.selectedProject))
+	}
+	if p.selectedBoard != "" {
+		statusB.WriteString(fmt.Sprintf("  Board:   %s\n", p.selectedBoard))
+	}
+	if p.flashRunner != "" {
+		statusB.WriteString(fmt.Sprintf("  Runner:  %s\n", p.flashRunner))
+	}
+	if p.buildDir != "" {
+		statusB.WriteString(fmt.Sprintf("  Dir:     %s\n", p.buildDir))
 	}
 	if p.lastBuild != nil {
 		statusB.WriteString(fmt.Sprintf("  Last build: %s (%s)\n",

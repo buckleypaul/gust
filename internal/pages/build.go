@@ -68,6 +68,7 @@ type BuildPage struct {
 	selectedProject string
 	selectedBoard   string
 	selectedShield  string
+	buildDir        string
 	buildStart      time.Time
 	width, height   int
 	message         string
@@ -98,6 +99,7 @@ func NewBuildPage(s *store.Store, cfg *config.Config, wsRoot string, runners ...
 		selectedProject: cfg.LastProject,
 		selectedBoard:   cfg.DefaultBoard,
 		selectedShield:  cfg.LastShield,
+		buildDir:        cfg.BuildDir,
 	}
 }
 
@@ -117,6 +119,10 @@ func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 	case app.ShieldSelectedMsg:
 		p.selectedShield = msg.Shield
+		return p, nil
+
+	case app.BuildDirChangedMsg:
+		p.buildDir = msg.Dir
 		return p, nil
 
 	case west.CommandResultMsg:
@@ -320,9 +326,15 @@ func (p *BuildPage) viewForm(width int, height int) string {
 	infoStyle := lipgloss.NewStyle().Foreground(ui.Text)
 	dimStyle := ui.DimStyle
 
+	buildDirDisplay := p.buildDir
+	if buildDirDisplay == "" {
+		buildDirDisplay = "(default)"
+	}
+
 	b.WriteString(normalLabel.Render(fmt.Sprintf("%-9s", "Building")) + " " + infoStyle.Render(projectDisplay) + "\n")
 	b.WriteString(normalLabel.Render(fmt.Sprintf("%-9s", "Board")) + " " + infoStyle.Render(boardDisplay) +
-		"  " + dimStyle.Render("Shield:") + " " + infoStyle.Render(shieldDisplay) + "\n")
+		"  " + dimStyle.Render("Shield:") + " " + infoStyle.Render(shieldDisplay) +
+		"  " + dimStyle.Render("Dir:") + " " + infoStyle.Render(buildDirDisplay) + "\n")
 	b.WriteString("\n")
 
 	// Pristine
@@ -462,6 +474,9 @@ func (p *BuildPage) startBuild() tea.Cmd {
 	}
 
 	args := []string{"build", "-b", board}
+	if p.buildDir != "" {
+		args = append(args, "-d", p.buildDir)
+	}
 	if p.pristine {
 		args = append(args, "-p", "always")
 	}
@@ -474,11 +489,7 @@ func (p *BuildPage) startBuild() tea.Cmd {
 	}
 	args = append(args, project)
 
-	label := fmt.Sprintf("Building for %s", board)
-	if p.pristine {
-		label = fmt.Sprintf("Building (pristine) for %s", board)
-	}
-	p.output.WriteString(label + "...\n\n")
+	p.output.WriteString("$ west " + strings.Join(args, " ") + "\n\n")
 	p.updateViewportContent()
 
 	return west.WithRequestID(requestID, p.runner.Run("west", args...))

@@ -24,6 +24,8 @@ const (
 	projFieldProject projField = iota
 	projFieldBoard
 	projFieldShield
+	projFieldBuildDir
+	projFieldRunner
 	projFieldKconfig
 	projFieldCount
 )
@@ -37,9 +39,11 @@ type ProjectPage struct {
 	manifestPath string
 
 	// Hardware section
-	projectInput textinput.Model
-	boardInput   textinput.Model
-	shieldInput  textinput.Model
+	projectInput  textinput.Model
+	boardInput    textinput.Model
+	shieldInput   textinput.Model
+	buildDirInput textinput.Model
+	runnerInput   textinput.Model
 
 	// Project type-ahead
 	projects         []west.Project
@@ -110,6 +114,22 @@ func NewProjectPage(cfg *config.Config, wsRoot string, manifestPath string) *Pro
 		shield.SetValue(cfg.LastShield)
 	}
 
+	buildDir := textinput.New()
+	buildDir.Placeholder = "e.g. build-custom"
+	buildDir.CharLimit = 256
+	buildDir.Prompt = ""
+	if cfg.BuildDir != "" {
+		buildDir.SetValue(cfg.BuildDir)
+	}
+
+	runnerIn := textinput.New()
+	runnerIn.Placeholder = "e.g. jlink, openocd"
+	runnerIn.CharLimit = 128
+	runnerIn.Prompt = ""
+	if cfg.FlashRunner != "" {
+		runnerIn.SetValue(cfg.FlashRunner)
+	}
+
 	search := textinput.New()
 	search.Placeholder = "Search symbols..."
 	search.CharLimit = 64
@@ -126,17 +146,19 @@ func NewProjectPage(cfg *config.Config, wsRoot string, manifestPath string) *Pro
 	add.Prompt = ""
 
 	p := &ProjectPage{
-		cfg:          cfg,
-		wsRoot:       wsRoot,
-		manifestPath: manifestPath,
-		projectInput: project,
-		boardInput:   board,
-		shieldInput:  shield,
-		searchInput:  search,
-		editInput:    edit,
-		addInput:     add,
-		projectPath:  cfg.LastProject,
-		focusedField: projFieldProject,
+		cfg:           cfg,
+		wsRoot:        wsRoot,
+		manifestPath:  manifestPath,
+		projectInput:  project,
+		boardInput:    board,
+		shieldInput:   shield,
+		buildDirInput: buildDir,
+		runnerInput:   runnerIn,
+		searchInput:   search,
+		editInput:     edit,
+		addInput:      add,
+		projectPath:   cfg.LastProject,
+		focusedField:  projFieldProject,
 	}
 
 	project.Focus()
@@ -177,6 +199,14 @@ func (p *ProjectPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 
 	case app.ShieldSelectedMsg:
 		p.shieldInput.SetValue(msg.Shield)
+		return p, nil
+
+	case app.BuildDirChangedMsg:
+		p.buildDirInput.SetValue(msg.Dir)
+		return p, nil
+
+	case app.FlashRunnerChangedMsg:
+		p.runnerInput.SetValue(msg.Runner)
 		return p, nil
 
 	case west.BoardsLoadedMsg:
@@ -447,6 +477,50 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		p.shieldInput, cmd = p.shieldInput.Update(msg)
 		return p, cmd
 
+	case projFieldBuildDir:
+		switch keyStr {
+		case "enter":
+			dir := p.buildDirInput.Value()
+			p.cfg.BuildDir = dir
+			if err := config.Save(*p.cfg, p.wsRoot, false); err != nil {
+				p.message = fmt.Sprintf("Build dir set, but config save failed: %v", err)
+			}
+			return p, func() tea.Msg {
+				return app.BuildDirChangedMsg{Dir: dir}
+			}
+		case "up":
+			p.advanceField(-1)
+			return p, nil
+		case "down":
+			p.advanceField(1)
+			return p, nil
+		}
+		var cmd tea.Cmd
+		p.buildDirInput, cmd = p.buildDirInput.Update(msg)
+		return p, cmd
+
+	case projFieldRunner:
+		switch keyStr {
+		case "enter":
+			runner := p.runnerInput.Value()
+			p.cfg.FlashRunner = runner
+			if err := config.Save(*p.cfg, p.wsRoot, false); err != nil {
+				p.message = fmt.Sprintf("Runner set, but config save failed: %v", err)
+			}
+			return p, func() tea.Msg {
+				return app.FlashRunnerChangedMsg{Runner: runner}
+			}
+		case "up":
+			p.advanceField(-1)
+			return p, nil
+		case "down":
+			p.advanceField(1)
+			return p, nil
+		}
+		var cmd tea.Cmd
+		p.runnerInput, cmd = p.runnerInput.Update(msg)
+		return p, cmd
+
 	case projFieldKconfig:
 		switch keyStr {
 		case "up":
@@ -531,6 +605,8 @@ func (p *ProjectPage) blurAll() {
 	p.projectInput.Blur()
 	p.boardInput.Blur()
 	p.shieldInput.Blur()
+	p.buildDirInput.Blur()
+	p.runnerInput.Blur()
 	p.projectListOpen = false
 	p.boardListOpen = false
 }
@@ -543,6 +619,10 @@ func (p *ProjectPage) blurCurrent() {
 		p.boardInput.Blur()
 	case projFieldShield:
 		p.shieldInput.Blur()
+	case projFieldBuildDir:
+		p.buildDirInput.Blur()
+	case projFieldRunner:
+		p.runnerInput.Blur()
 	}
 }
 
@@ -554,6 +634,10 @@ func (p *ProjectPage) focusCurrent() {
 		p.boardInput.Focus()
 	case projFieldShield:
 		p.shieldInput.Focus()
+	case projFieldBuildDir:
+		p.buildDirInput.Focus()
+	case projFieldRunner:
+		p.runnerInput.Focus()
 	}
 }
 
@@ -585,6 +669,8 @@ func (p *ProjectPage) View() string {
 	p.projectInput.Width = inputWidth
 	p.boardInput.Width = inputWidth
 	p.shieldInput.Width = inputWidth
+	p.buildDirInput.Width = inputWidth
+	p.runnerInput.Width = inputWidth
 
 	// -- Hardware section --
 
@@ -606,6 +692,12 @@ func (p *ProjectPage) View() string {
 
 	// Shield input
 	b.WriteString("  " + renderLabel("Shield", projFieldShield) + " " + p.shieldInput.View() + "\n")
+
+	// Build Dir input
+	b.WriteString("  " + renderLabel("Build Dir", projFieldBuildDir) + " " + p.buildDirInput.View() + "\n")
+
+	// Flash Runner input
+	b.WriteString("  " + renderLabel("Runner", projFieldRunner) + " " + p.runnerInput.View() + "\n")
 
 	b.WriteString("\n")
 
@@ -838,7 +930,9 @@ func (p *ProjectPage) ShortHelp() []key.Binding {
 }
 
 func (p *ProjectPage) InputCaptured() bool {
-	return p.projectInput.Focused() || p.boardInput.Focused() || p.shieldInput.Focused() || p.editing || p.adding || p.searchInput.Focused()
+	return p.projectInput.Focused() || p.boardInput.Focused() || p.shieldInput.Focused() ||
+		p.buildDirInput.Focused() || p.runnerInput.Focused() ||
+		p.editing || p.adding || p.searchInput.Focused()
 }
 
 func (p *ProjectPage) SetSize(w, h int) {
