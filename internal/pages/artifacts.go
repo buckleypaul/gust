@@ -82,6 +82,9 @@ func (p *ArtifactsPage) renderBuilds(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("Error: %v\n", err))
 		return
 	}
+	b.WriteString(ui.DimStyle.Render(fmt.Sprintf("  %-12s  %-30s  %-22s  %-12s  %-8s  %-6s",
+		"TIME", "BOARD", "GIT", "BUILD DIR", "SIZE", "STATUS")) + "\n")
+	b.WriteString(ui.DimStyle.Render("  "+strings.Repeat("─", 100)) + "\n")
 	count := 0
 	for i := len(builds) - 1; i >= 0; i-- {
 		r := builds[i]
@@ -138,6 +141,9 @@ func (p *ArtifactsPage) renderFlashes(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("Error: %v\n", err))
 		return
 	}
+	b.WriteString(ui.DimStyle.Render(fmt.Sprintf("  %-12s  %-30s  %-12s  %-6s",
+		"TIME", "BOARD", "DURATION", "STATUS")) + "\n")
+	b.WriteString(ui.DimStyle.Render("  "+strings.Repeat("─", 68)) + "\n")
 	count := 0
 	for i := len(flashes) - 1; i >= 0; i-- {
 		r := flashes[i]
@@ -164,6 +170,9 @@ func (p *ArtifactsPage) renderTests(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("Error: %v\n", err))
 		return
 	}
+	b.WriteString(ui.DimStyle.Render(fmt.Sprintf("  %-12s  %-30s  %-12s  %-6s",
+		"TIME", "BOARD", "DURATION", "STATUS")) + "\n")
+	b.WriteString(ui.DimStyle.Render("  "+strings.Repeat("─", 68)) + "\n")
 	count := 0
 	for i := len(tests) - 1; i >= 0; i-- {
 		r := tests[i]
@@ -190,6 +199,9 @@ func (p *ArtifactsPage) renderSerialLogs(b *strings.Builder) {
 		b.WriteString(fmt.Sprintf("Error: %v\n", err))
 		return
 	}
+	b.WriteString(ui.DimStyle.Render(fmt.Sprintf("  %-12s  %-20s  %-10s  %s",
+		"TIME", "PORT", "BAUD", "LOG FILE")) + "\n")
+	b.WriteString(ui.DimStyle.Render("  "+strings.Repeat("─", 68)) + "\n")
 	if len(logs) == 0 {
 		b.WriteString(ui.DimStyle.Render("No serial logs yet."))
 		return

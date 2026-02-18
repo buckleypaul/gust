@@ -484,20 +484,6 @@ func (p *BuildPage) startBuild() tea.Cmd {
 		return nil
 	}
 
-	// Capture git state (silently ignore errors)
-	p.gitBranch = ""
-	p.gitCommit = ""
-	p.gitDirty = false
-	if out, err := gitCmd(p.wsRoot, "branch", "--show-current"); err == nil {
-		p.gitBranch = strings.TrimSpace(out)
-	}
-	if out, err := gitCmd(p.wsRoot, "rev-parse", "--short=8", "HEAD"); err == nil {
-		p.gitCommit = strings.TrimSpace(out)
-	}
-	if out, err := gitCmd(p.wsRoot, "status", "--porcelain"); err == nil {
-		p.gitDirty = strings.TrimSpace(out) != ""
-	}
-
 	p.state = buildStateRunning
 	requestID := p.nextRequestID()
 	p.activeRequestID = requestID
@@ -509,6 +495,25 @@ func (p *BuildPage) startBuild() tea.Cmd {
 	// Resolve relative project paths against the workspace root.
 	if !filepath.IsAbs(project) {
 		project = filepath.Join(p.wsRoot, project)
+	}
+
+	// Capture git state from the project directory (silently ignore errors).
+	// The project dir is a git repo; wsRoot typically is not.
+	gitDir := project
+	if gitDir == "" {
+		gitDir = p.wsRoot
+	}
+	p.gitBranch = ""
+	p.gitCommit = ""
+	p.gitDirty = false
+	if out, err := gitCmd(gitDir, "branch", "--show-current"); err == nil {
+		p.gitBranch = strings.TrimSpace(out)
+	}
+	if out, err := gitCmd(gitDir, "rev-parse", "--short=8", "HEAD"); err == nil {
+		p.gitCommit = strings.TrimSpace(out)
+	}
+	if out, err := gitCmd(gitDir, "status", "--porcelain"); err == nil {
+		p.gitDirty = strings.TrimSpace(out) != ""
 	}
 
 	args := []string{"build", "-b", board}
