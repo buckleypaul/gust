@@ -36,8 +36,6 @@ func main() {
 
 	pageMap := map[app.PageID]app.Page{
 		app.WorkspacePage: pages.NewWorkspacePage(ws, runner),
-		app.BuildPage:     pages.NewBuildPage(st, &cfg, ws.Root, runner),
-		app.FlashPage:     pages.NewFlashPage(st, &cfg, ws.Root, runner),
 		app.MonitorPage:   pages.NewMonitorPage(st, cfg.SerialBaudRate),
 		app.TestPage:      pages.NewTestPage(st, &cfg, ws.Root, runner),
 		app.ArtifactsPage: pages.NewArtifactsPage(st),
