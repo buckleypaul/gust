@@ -778,7 +778,9 @@ func (p *ProjectPage) updateViewportContent() {
 	}
 }
 
-func (p *ProjectPage) View() string {
+func (p *ProjectPage) viewConfig(width, height int) string {
+	p.flash.refreshLastBuild(p.store)
+
 	var b strings.Builder
 
 	if p.message != "" {
@@ -799,7 +801,7 @@ func (p *ProjectPage) View() string {
 		return normalLabel.Render(padded)
 	}
 
-	inputWidth := p.width - lw - 6
+	inputWidth := width - lw - 6
 	if inputWidth < 10 {
 		inputWidth = 10
 	}
@@ -840,7 +842,7 @@ func (p *ProjectPage) View() string {
 
 	// -- Kconfig section --
 	sectionLabel := lipgloss.NewStyle().Foreground(ui.Subtle).Bold(true)
-	separator := strings.Repeat("─", max(p.width-4, 10))
+	separator := strings.Repeat("─", max(width-4, 10))
 	b.WriteString("  " + sectionLabel.Render("── Kconfig (prj.conf) "+separator) + "\n")
 
 	if !p.kconfigLoaded {
@@ -862,7 +864,7 @@ func (p *ProjectPage) View() string {
 				b.WriteString("  " + ui.DimStyle.Render("No Kconfig symbols found.") + "\n")
 			}
 		} else {
-			listHeight := p.height - 18
+			listHeight := height - 18
 			if listHeight < 3 {
 				listHeight = 3
 			}
@@ -914,7 +916,7 @@ func (p *ProjectPage) View() string {
 	if boardFile != "" {
 		overlayHeader += " (" + boardFile + ")"
 	}
-	overlaySep := strings.Repeat("─", max(p.width-len(overlayHeader)-6, 10))
+	overlaySep := strings.Repeat("─", max(width-len(overlayHeader)-6, 10))
 	b.WriteString("  " + sectionLabel.Render(overlayHeader+" "+overlaySep) + "\n")
 
 	if len(p.overlayEntries) > 0 {
@@ -938,10 +940,48 @@ func (p *ProjectPage) View() string {
 
 	b.WriteString("\n")
 
+	// Build section
+	b.WriteString(p.build.viewSection(width, p.focusedField == projFieldCMake))
+	b.WriteString("\n")
+
+	// Flash section
+	b.WriteString(p.flash.viewSection(width))
+	b.WriteString("\n")
+
 	// Help bar
-	b.WriteString(ui.DimStyle.Render("  ↑/↓: navigate  /: search  e: edit  a: add  d: delete"))
+	b.WriteString(ui.DimStyle.Render("  ↑/↓: navigate  /: search  e: edit  a: add  d: delete  ctrl+b: build  f: flash"))
 
 	return b.String()
+}
+
+func (p *ProjectPage) View() string {
+	if p.output.Len() > 0 {
+		outputHeight := p.height / 2
+		if outputHeight < 5 {
+			outputHeight = 5
+		}
+		if outputHeight > 20 {
+			outputHeight = 20
+		}
+		configHeight := p.height - outputHeight
+
+		p.viewport.Width = p.width - 4
+		p.viewport.Height = outputHeight - 2
+		if p.viewport.Height < 3 {
+			p.viewport.Height = 3
+		}
+
+		label := "Output"
+		if p.activeOp != "" {
+			label = p.activeOp + " Output"
+		}
+		outputPanel := ui.Panel(label, p.viewport.View(), p.width, outputHeight, false)
+		return lipgloss.JoinVertical(lipgloss.Left,
+			p.viewConfig(p.width, configHeight),
+			outputPanel,
+		)
+	}
+	return p.viewConfig(p.width, p.height)
 }
 
 func (p *ProjectPage) renderProjectDropdown(width int) string {
@@ -1063,6 +1103,8 @@ func (p *ProjectPage) ShortHelp() []key.Binding {
 		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add")),
 		key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
+		key.NewBinding(key.WithKeys("ctrl+b"), key.WithHelp("ctrl+b", "build")),
+		key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "flash")),
 	}
 }
 
