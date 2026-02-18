@@ -24,7 +24,7 @@ func TestProjectPageLoadKconfigUsesWorkspaceRelativeProjectPath(t *testing.T) {
 	}
 
 	cfg := config.Defaults()
-	p := NewProjectPage(&cfg, wsRoot, "")
+	p := NewProjectPage(nil, &cfg, wsRoot, "")
 	p.projectPath = filepath.Join("apps", "demo")
 
 	msg := p.loadKconfig()
@@ -51,7 +51,7 @@ func TestProjectPageSaveKconfigWritesWorkspaceRelativeProjectPath(t *testing.T) 
 	}
 
 	cfg := config.Defaults()
-	p := NewProjectPage(&cfg, wsRoot, "")
+	p := NewProjectPage(nil, &cfg, wsRoot, "")
 	p.projectPath = filepath.Join("apps", "demo")
 	p.kconfigEntries = []kconfigEntry{
 		{Name: "CONFIG_BAR", Value: "42"},
@@ -73,7 +73,7 @@ func TestProjectPageSaveKconfigWritesWorkspaceRelativeProjectPath(t *testing.T) 
 func TestProjectPageSearchFlowFiltersKconfigEntries(t *testing.T) {
 	wsRoot := t.TempDir()
 	cfg := config.Defaults()
-	p := NewProjectPage(&cfg, wsRoot, "")
+	p := NewProjectPage(nil, &cfg, wsRoot, "")
 	p.focusedField = projFieldKconfig
 	p.kconfigLoaded = true
 	p.kconfigEntries = []kconfigEntry{
@@ -110,7 +110,7 @@ func TestProjectPageAddEditDeleteFlow(t *testing.T) {
 	}
 
 	cfg := config.Defaults()
-	p := NewProjectPage(&cfg, wsRoot, "")
+	p := NewProjectPage(nil, &cfg, wsRoot, "")
 	p.focusedField = projFieldKconfig
 	p.projectPath = projectRel
 	p.kconfigLoaded = true
@@ -170,7 +170,7 @@ func TestProjectPageAddEditDeleteFlow(t *testing.T) {
 func TestProjectPageBoardEnterSelection(t *testing.T) {
 	wsRoot := t.TempDir()
 	cfg := config.Defaults()
-	p := NewProjectPage(&cfg, wsRoot, "")
+	p := NewProjectPage(nil, &cfg, wsRoot, "")
 	p.focusedField = projFieldBoard
 	p.boards = []west.Board{{Name: "board-a"}, {Name: "board-b"}}
 	p.filterBoards()

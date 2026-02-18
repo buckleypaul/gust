@@ -8,11 +8,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/buckleypaul/gust/internal/app"
 	"github.com/buckleypaul/gust/internal/config"
+	"github.com/buckleypaul/gust/internal/store"
 	"github.com/buckleypaul/gust/internal/ui"
 	"github.com/buckleypaul/gust/internal/west"
 )
@@ -27,6 +29,7 @@ const (
 	projFieldBuildDir
 	projFieldRunner
 	projFieldKconfig
+	projFieldCMake  // cmake args input in build section
 	projFieldCount
 )
 
@@ -82,6 +85,18 @@ type ProjectPage struct {
 	overlayEntries []kconfigEntry
 	overlayExists  bool
 
+	// Build/flash sub-components
+	build  buildSection
+	flash  flashSection
+	store  *store.Store
+	runner west.Runner
+
+	// Shared output panel
+	output          strings.Builder
+	viewport        viewport.Model
+	activeOp        string // "Build" or "Flash"
+	activeRequestID string
+
 	// Metadata
 	width, height int
 	message       string
@@ -89,7 +104,7 @@ type ProjectPage struct {
 }
 
 // NewProjectPage creates a new ProjectPage.
-func NewProjectPage(cfg *config.Config, wsRoot string, manifestPath string) *ProjectPage {
+func NewProjectPage(s *store.Store, cfg *config.Config, wsRoot string, manifestPath string, runners ...west.Runner) *ProjectPage {
 	project := textinput.New()
 	project.Placeholder = "type to search..."
 	project.CharLimit = 256
@@ -145,6 +160,11 @@ func NewProjectPage(cfg *config.Config, wsRoot string, manifestPath string) *Pro
 	add.CharLimit = 256
 	add.Prompt = ""
 
+	runner := west.RealRunner()
+	if len(runners) > 0 && runners[0] != nil {
+		runner = runners[0]
+	}
+
 	p := &ProjectPage{
 		cfg:           cfg,
 		wsRoot:        wsRoot,
@@ -159,6 +179,10 @@ func NewProjectPage(cfg *config.Config, wsRoot string, manifestPath string) *Pro
 		addInput:      add,
 		projectPath:   cfg.LastProject,
 		focusedField:  projFieldProject,
+		store:         s,
+		runner:        runner,
+		build:         newBuildSection(),
+		viewport:      viewport.New(0, 0),
 	}
 
 	project.Focus()
@@ -607,6 +631,7 @@ func (p *ProjectPage) blurAll() {
 	p.shieldInput.Blur()
 	p.buildDirInput.Blur()
 	p.runnerInput.Blur()
+	p.build.cmakeInput.Blur()
 	p.projectListOpen = false
 	p.boardListOpen = false
 }
@@ -623,6 +648,8 @@ func (p *ProjectPage) blurCurrent() {
 		p.buildDirInput.Blur()
 	case projFieldRunner:
 		p.runnerInput.Blur()
+	case projFieldCMake:
+		p.build.cmakeInput.Blur()
 	}
 }
 
@@ -638,6 +665,8 @@ func (p *ProjectPage) focusCurrent() {
 		p.buildDirInput.Focus()
 	case projFieldRunner:
 		p.runnerInput.Focus()
+	case projFieldCMake:
+		p.build.cmakeInput.Focus()
 	}
 }
 
@@ -932,7 +961,7 @@ func (p *ProjectPage) ShortHelp() []key.Binding {
 func (p *ProjectPage) InputCaptured() bool {
 	return p.projectInput.Focused() || p.boardInput.Focused() || p.shieldInput.Focused() ||
 		p.buildDirInput.Focused() || p.runnerInput.Focused() ||
-		p.editing || p.adding || p.searchInput.Focused()
+		p.editing || p.adding || p.searchInput.Focused() || p.build.cmakeInput.Focused()
 }
 
 func (p *ProjectPage) SetSize(w, h int) {

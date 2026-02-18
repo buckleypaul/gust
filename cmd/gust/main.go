@@ -42,7 +42,7 @@ func main() {
 		app.TestPage:      pages.NewTestPage(st, &cfg, ws.Root, runner),
 		app.ArtifactsPage: pages.NewArtifactsPage(st),
 		app.WestPage:      pages.NewWestPage(runner),
-		app.ProjectPage:   pages.NewProjectPage(&cfg, ws.Root, ws.ManifestPath),
+		app.ProjectPage:   pages.NewProjectPage(st, &cfg, ws.Root, ws.ManifestPath, runner),
 		app.SettingsPage:  pages.NewSettingsPage(&cfg, ws.Root),
 	}
 
