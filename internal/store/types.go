@@ -10,9 +10,14 @@ type BuildRecord struct {
 	Success   bool      `json:"success"`
 	Duration  string    `json:"duration"`
 	Artifacts []string  `json:"artifacts"`
-	Shield    string    `json:"shield,omitempty"`
-	Pristine  bool      `json:"pristine,omitempty"`
-	CMakeArgs string    `json:"cmake_args,omitempty"`
+	Shield     string    `json:"shield,omitempty"`
+	Pristine   bool      `json:"pristine,omitempty"`
+	CMakeArgs  string    `json:"cmake_args,omitempty"`
+	GitBranch  string    `json:"git_branch,omitempty"`
+	GitCommit  string    `json:"git_commit,omitempty"`
+	GitDirty   bool      `json:"git_dirty,omitempty"`
+	BuildDir   string    `json:"build_dir,omitempty"`
+	BinarySize int64     `json:"binary_size,omitempty"`
 }
 
 // FlashRecord captures the result of a flash operation.

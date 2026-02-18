@@ -2,6 +2,7 @@ package pages
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -74,6 +75,11 @@ type BuildPage struct {
 	message         string
 	requestSeq      int
 	activeRequestID string
+
+	// Git state captured at build start
+	gitBranch string
+	gitCommit string
+	gitDirty  bool
 }
 
 func NewBuildPage(s *store.Store, cfg *config.Config, wsRoot string, runners ...west.Runner) *BuildPage {
@@ -146,17 +152,35 @@ func (p *BuildPage) Update(msg tea.Msg) (app.Page, tea.Cmd) {
 		p.updateViewportContent()
 		p.viewport.GotoBottom()
 
+		// Capture binary size on success
+		var binarySize int64
+		if success {
+			buildDir := p.buildDir
+			if buildDir == "" {
+				buildDir = "build"
+			}
+			binPath := filepath.Join(p.wsRoot, buildDir, "zephyr", "zephyr.bin")
+			if fi, err := os.Stat(binPath); err == nil {
+				binarySize = fi.Size()
+			}
+		}
+
 		// Record build
 		if p.store != nil {
 			if err := p.store.AddBuild(store.BuildRecord{
-				Board:     p.selectedBoard,
-				App:       p.projectValue(),
-				Timestamp: p.buildStart,
-				Success:   success,
-				Duration:  msg.Duration.String(),
-				Shield:    p.selectedShield,
-				Pristine:  p.pristine,
-				CMakeArgs: p.cmakeInput.Value(),
+				Board:      p.selectedBoard,
+				App:        p.projectValue(),
+				Timestamp:  p.buildStart,
+				Success:    success,
+				Duration:   msg.Duration.String(),
+				Shield:     p.selectedShield,
+				Pristine:   p.pristine,
+				CMakeArgs:  p.cmakeInput.Value(),
+				GitBranch:  p.gitBranch,
+				GitCommit:  p.gitCommit,
+				GitDirty:   p.gitDirty,
+				BuildDir:   p.buildDir,
+				BinarySize: binarySize,
 			}); err != nil {
 				p.message = fmt.Sprintf("Build recorded, but history save failed: %v", err)
 			}
@@ -460,6 +484,20 @@ func (p *BuildPage) startBuild() tea.Cmd {
 		return nil
 	}
 
+	// Capture git state (silently ignore errors)
+	p.gitBranch = ""
+	p.gitCommit = ""
+	p.gitDirty = false
+	if out, err := gitCmd(p.wsRoot, "branch", "--show-current"); err == nil {
+		p.gitBranch = strings.TrimSpace(out)
+	}
+	if out, err := gitCmd(p.wsRoot, "rev-parse", "--short=8", "HEAD"); err == nil {
+		p.gitCommit = strings.TrimSpace(out)
+	}
+	if out, err := gitCmd(p.wsRoot, "status", "--porcelain"); err == nil {
+		p.gitDirty = strings.TrimSpace(out) != ""
+	}
+
 	p.state = buildStateRunning
 	requestID := p.nextRequestID()
 	p.activeRequestID = requestID
@@ -542,4 +580,12 @@ func (p *BuildPage) copyToClipboard() {
 func (p *BuildPage) nextRequestID() string {
 	p.requestSeq++
 	return fmt.Sprintf("build-%d", p.requestSeq)
+}
+
+// gitCmd runs a git subcommand in dir and returns stdout.
+func gitCmd(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	return string(out), err
 }

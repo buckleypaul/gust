@@ -93,12 +93,42 @@ func (p *ArtifactsPage) renderBuilds(b *strings.Builder) {
 		if !r.Success {
 			status = ui.ErrorBadge("FAIL")
 		}
-		b.WriteString(fmt.Sprintf("  %s  %-30s  %s  %s\n",
+
+		gitCol := "—"
+		if r.GitCommit != "" {
+			gitCol = r.GitBranch + "@" + r.GitCommit
+			if r.GitDirty {
+				gitCol += "*"
+			}
+		}
+
+		dirCol := "(default)"
+		if r.BuildDir != "" {
+			dirCol = r.BuildDir
+		}
+
+		sizeCol := "—"
+		if r.BinarySize > 0 {
+			sizeCol = formatBytes(r.BinarySize)
+		}
+
+		b.WriteString(fmt.Sprintf("  %s  %-30s  %-22s  %-12s  %-8s  %s\n",
 			r.Timestamp.Format("Jan 02 15:04"),
-			r.Board, r.Duration, status))
+			r.Board, gitCol, dirCol, sizeCol, status))
 	}
 	if count == 0 {
 		b.WriteString(ui.DimStyle.Render("No build records yet."))
+	}
+}
+
+func formatBytes(n int64) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
 	}
 }
 
