@@ -68,7 +68,7 @@ func (b *buildSection) nextRequestID() string {
 }
 
 // viewSection renders the Build section header and controls.
-func (b *buildSection) viewSection(width int, focusedCMake bool) string {
+func (b *buildSection) viewSection(width int, focusedPristine, focusedCMake bool) string {
 	var sb strings.Builder
 	sectionLabel := lipgloss.NewStyle().Foreground(ui.Subtle).Bold(true)
 	separator := strings.Repeat("─", max(width-9, 10))
@@ -81,7 +81,11 @@ func (b *buildSection) viewSection(width int, focusedCMake bool) string {
 	if b.pristine {
 		check = "[x]"
 	}
-	sb.WriteString("  " + normalLabel.Render(fmt.Sprintf("%-9s", "Pristine")) + " " + check + "\n")
+	pristineLbl := normalLabel.Render(fmt.Sprintf("%-9s", "Pristine"))
+	if focusedPristine {
+		pristineLbl = focusedLabel.Render(fmt.Sprintf("%-9s", "Pristine"))
+	}
+	sb.WriteString("  " + pristineLbl + " " + check + "\n")
 
 	inputWidth := width - labelWidth - 4
 	if inputWidth < 10 {

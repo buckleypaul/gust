@@ -32,7 +32,8 @@ const (
 	projFieldBuildDir
 	projFieldRunner
 	projFieldKconfig
-	projFieldCMake  // cmake args input in build section
+	projFieldPristine // pristine checkbox in build section
+	projFieldCMake    // cmake args input in build section
 	projFieldCount
 )
 
@@ -590,6 +591,8 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		case "down":
 			if p.kconfigCursor < len(p.kconfigFiltered)-1 {
 				p.kconfigCursor++
+			} else {
+				p.advanceField(1)
 			}
 			return p, nil
 		case "/":
@@ -621,6 +624,19 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 					p.message = fmt.Sprintf("Failed to save prj.conf: %v", err)
 				}
 			}
+			return p, nil
+		}
+
+	case projFieldPristine:
+		switch keyStr {
+		case "up":
+			p.advanceField(-1)
+			return p, nil
+		case "down":
+			p.advanceField(1)
+			return p, nil
+		case " ", "enter":
+			p.build.pristine = !p.build.pristine
 			return p, nil
 		}
 
@@ -941,7 +957,7 @@ func (p *ProjectPage) viewConfig(width, height int) string {
 	b.WriteString("\n")
 
 	// Build section
-	b.WriteString(p.build.viewSection(width, p.focusedField == projFieldCMake))
+	b.WriteString(p.build.viewSection(width, p.focusedField == projFieldPristine, p.focusedField == projFieldCMake))
 	b.WriteString("\n")
 
 	// Flash section
@@ -949,7 +965,7 @@ func (p *ProjectPage) viewConfig(width, height int) string {
 	b.WriteString("\n")
 
 	// Help bar
-	b.WriteString(ui.DimStyle.Render("  ↑/↓: navigate  /: search  e: edit  a: add  d: delete  ctrl+b: build  f: flash"))
+	b.WriteString(ui.DimStyle.Render("  ↑/↓: navigate  /: search  e: edit  a: add  d: delete  space: toggle pristine  ctrl+b: build  f: flash"))
 
 	return b.String()
 }
