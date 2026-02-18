@@ -118,10 +118,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if msg.String() == "ctrl+c" {
 					return m, tea.Quit
 				}
-				page := m.pages[m.activePage]
-				newPage, cmd := page.Update(msg)
-				m.pages[m.activePage] = newPage
-				return m, cmd
+				// Always let Tab through so it can toggle focus to the nav panel.
+				if !key.Matches(msg, GlobalKeys.ToggleFocus) {
+					page := m.pages[m.activePage]
+					newPage, cmd := page.Update(msg)
+					m.pages[m.activePage] = newPage
+					return m, cmd
+				}
 			}
 		}
 
@@ -135,9 +138,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, GlobalKeys.ToggleFocus):
 			if m.focus == FocusSidebar {
 				m.focus = FocusContent
-				return m, nil
+			} else {
+				m.focus = FocusSidebar
 			}
-			// When content focused, fall through to page handler
+			return m, nil
 		}
 
 		// Handle arrow keys based on focus
@@ -151,11 +155,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "enter", "right":
 				m.focus = FocusContent
-				return m, nil
-			}
-		} else if m.focus == FocusContent {
-			if msg.String() == "left" {
-				m.focus = FocusSidebar
 				return m, nil
 			}
 		}

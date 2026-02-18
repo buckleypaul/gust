@@ -364,12 +364,6 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 
 	// Global form keys
 	switch keyStr {
-	case "tab":
-		p.advanceField(1)
-		return p, nil
-	case "shift+tab":
-		p.advanceField(-1)
-		return p, nil
 	case "esc":
 		p.projectListOpen = false
 		p.boardListOpen = false
@@ -382,19 +376,13 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 	case projFieldProject:
 		switch keyStr {
 		case "down":
-			if len(p.filteredProjects) > 0 && !p.projectListOpen {
-				p.projectListOpen = true
-				p.projectCursor = 0
-				return p, nil
-			} else if !p.projectListOpen {
-				p.advanceField(1)
-				return p, nil
-			}
+			p.projectListOpen = false
+			p.advanceField(1)
+			return p, nil
 		case "up":
-			if !p.projectListOpen {
-				p.advanceField(-1)
-				return p, nil
-			}
+			p.projectListOpen = false
+			p.advanceField(-1)
+			return p, nil
 		case "enter":
 			if len(p.filteredProjects) > 0 {
 				return p, p.selectProject(p.filteredProjects[0].Path)
@@ -409,19 +397,13 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 	case projFieldBoard:
 		switch keyStr {
 		case "down":
-			if len(p.filteredBoards) > 0 && !p.boardListOpen {
-				p.boardListOpen = true
-				p.boardCursor = 0
-				return p, nil
-			} else if !p.boardListOpen {
-				p.advanceField(1)
-				return p, nil
-			}
+			p.boardListOpen = false
+			p.advanceField(1)
+			return p, nil
 		case "up":
-			if !p.boardListOpen {
-				p.advanceField(-1)
-				return p, nil
-			}
+			p.boardListOpen = false
+			p.advanceField(-1)
+			return p, nil
 		case "enter":
 			if len(p.filteredBoards) > 0 {
 				selected := p.filteredBoards[0].Name
@@ -470,6 +452,8 @@ func (p *ProjectPage) handleKey(msg tea.KeyMsg) (app.Page, tea.Cmd) {
 		case "up":
 			if p.kconfigCursor > 0 {
 				p.kconfigCursor--
+			} else {
+				p.advanceField(-1)
 			}
 			return p, nil
 		case "down":
@@ -726,7 +710,7 @@ func (p *ProjectPage) View() string {
 	b.WriteString("\n")
 
 	// Help bar
-	b.WriteString(ui.DimStyle.Render("  tab: next  /: search  e: edit  a: add  d: delete"))
+	b.WriteString(ui.DimStyle.Render("  ↑/↓: navigate  /: search  e: edit  a: add  d: delete"))
 
 	return b.String()
 }
@@ -845,7 +829,7 @@ func (p *ProjectPage) ShortHelp() []key.Binding {
 		}
 	}
 	return []key.Binding{
-		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next field")),
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "navigate")),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
 		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add")),
