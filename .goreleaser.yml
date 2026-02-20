@@ -31,11 +31,13 @@ builds:
         env:
           - CGO_ENABLED=1
           - CC=o64-clang
+          - CGO_CFLAGS=-Wno-unused-command-line-argument
       - goos: darwin
         goarch: arm64
         env:
           - CGO_ENABLED=1
           - CC=oa64-clang
+          - CGO_CFLAGS=-Wno-unused-command-line-argument
 
 archives:
   - format: tar.gz
