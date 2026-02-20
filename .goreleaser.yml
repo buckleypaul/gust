@@ -28,6 +28,7 @@ builds:
           - CC=aarch64-linux-gnu-gcc
       - goos: darwin
         goarch: amd64
+        goamd64: v1
         env:
           - CGO_ENABLED=1
           - CC=o64-clang
