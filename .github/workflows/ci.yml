@@ -15,7 +15,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Install GCC (CGO required for serial library)
-        run: sudo apt-get install -y gcc
+        run: sudo apt-get update && sudo apt-get install -y gcc
       - name: Run unit tests
         run: go test ./...
 
@@ -28,7 +28,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Install GCC and QEMU
-        run: sudo apt-get install -y gcc qemu-system-arm qemu-system-x86
+        run: sudo apt-get update && sudo apt-get install -y gcc qemu-system-arm qemu-system-x86
       - uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           sdk-version: 0.17.0
