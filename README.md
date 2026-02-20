@@ -2,6 +2,7 @@
 
 A multi-paned TUI for Zephyr RTOS development with west.
 
+[![CI](https://github.com/buckleypaul/gust/actions/workflows/ci.yml/badge.svg)](https://github.com/buckleypaul/gust/actions/workflows/ci.yml)
 ![gust](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
