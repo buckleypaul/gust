@@ -5,8 +5,6 @@
 
 A terminal UI for [Zephyr RTOS](https://zephyrproject.org) development. Build, flash, test, and monitor your firmware from a single interface without leaving the terminal.
 
-<!-- screenshot: main view showing sidebar + build page -->
-
 ## What it does
 
 Nine pages accessible from a sidebar:
@@ -22,8 +20,6 @@ Nine pages accessible from a sidebar:
 | **West** | Run arbitrary west commands |
 | **Config** | Browse and search Kconfig symbols from `prj.conf` |
 | **Settings** | Edit default board, serial port, baud rate, and more |
-
-<!-- screenshot: serial monitor page -->
 
 ## Installation
 
